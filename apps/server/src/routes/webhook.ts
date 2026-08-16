@@ -7,6 +7,7 @@ import { handleCollectionCallback, handleCollectionCommand } from "../telegram/c
 import { MediaGroupReplyBatcher } from "../telegram/media-group-batcher.js";
 import { handlePlusPreCheckout, handleSuccessfulPlusPayment } from "../telegram/payments.js";
 import { handleBillingCommand } from "../telegram/support.js";
+import { handleSharedCollectionStart } from "../telegram/shared-collection-start.js";
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
@@ -39,6 +40,8 @@ export async function webhookRoutes(app: FastifyInstance, services: Services) {
     if (update?.message) {
       if (update.message.successful_payment) {
         await handleSuccessfulPlusPayment(services, update.message);
+      } else if (await handleSharedCollectionStart(services, update.message)) {
+        // A capability deep link resolves to an exact read-only collection opener.
       } else if (isStartCommand(update.message.text)) {
         await sendWelcomeReply(services.config, update.message.chat.id);
       } else if (await handleBillingCommand(services, update.message)) {

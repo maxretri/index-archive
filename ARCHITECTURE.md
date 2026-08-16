@@ -63,7 +63,7 @@ The browser uploads one file with progress to the authenticated server. The serv
 
 ### Collection sharing
 
-The owner creates a random 256-bit collection capability and uses Telegram's prepared-message recipient picker to share a Main Mini App deep link. The raw token appears only in that link; PostgreSQL stores its SHA-256 hash. A recipient still authenticates through signed Telegram `initData`, then receives read-only, cursor-paginated metadata. Shared binary reads validate the active capability, collection membership, and file owner before resolving Telegram storage. `STOP SHARING` revokes every active capability for the collection immediately.
+The owner creates a random 256-bit collection capability and uses Telegram's prepared-message recipient picker to share a photo card. Its bot deep link carries the capability as a `/start` payload. The bot validates the hashed capability and replies in the recipient's private bot chat with an `OPEN COLLECTION` Web App button containing the same capability. This fallback works even when Telegram has not been configured with a Main Mini App in BotFather. The raw token appears only in the deep link and Web App URL; PostgreSQL stores its SHA-256 hash. A recipient still authenticates through signed Telegram `initData`, then receives read-only, cursor-paginated metadata. Shared binary reads validate the active capability, collection membership, and file owner before resolving Telegram storage. `STOP SHARING` revokes every active capability for the collection immediately.
 
 ### INDEX PLUS through Telegram Stars
 

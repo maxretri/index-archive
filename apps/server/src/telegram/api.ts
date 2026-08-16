@@ -65,6 +65,31 @@ export async function sendWelcomeReply(config: Config, chatId: number) {
   }), { "content-type": "application/json" });
 }
 
+export async function sendSharedCollectionOpen(
+  config: Config,
+  chatId: number,
+  collection: { name: string; itemCount: number },
+  token: string
+) {
+  const separator = config.MINI_APP_URL.includes("?") ? "&" : "?";
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: `SHARED INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}\nREAD ONLY`,
+    reply_markup: { inline_keyboard: [[{
+      text: "OPEN COLLECTION",
+      web_app: { url: `${config.MINI_APP_URL}${separator}share=${encodeURIComponent(token)}` }
+    }]] }
+  }), { "content-type": "application/json" });
+}
+
+export async function sendSharedCollectionUnavailable(config: Config, chatId: number) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: "COLLECTION UNAVAILABLE.\nTHE LINK MAY HAVE BEEN REVOKED OR DELETED.",
+    reply_markup: openIndexMarkup(config)
+  }), { "content-type": "application/json" });
+}
+
 export interface TelegramCollectionChoice { id: string; name: string }
 
 export async function sendCollectionPicker(

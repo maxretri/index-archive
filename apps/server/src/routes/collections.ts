@@ -96,7 +96,7 @@ export async function collectionRoutes(app: FastifyInstance, services: Services,
     }).select("id").single();
     if (insertError) throw insertError;
 
-    const link = `https://t.me/${services.config.BOT_USERNAME}?startapp=collection_${token}`;
+    const link = `https://t.me/${services.config.BOT_USERNAME}?start=collection_${token}`;
     const relatedCover = coverMembership?.files as unknown as { telegram_file_id?: string } | Array<{ telegram_file_id?: string }> | null;
     const coverTelegramFileId = (Array.isArray(relatedCover) ? relatedCover[0] : relatedCover)?.telegram_file_id ?? null;
     try {

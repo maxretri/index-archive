@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
-import { prepareCollectionShare, preparePhotoShare } from "./api.js";
+import { prepareCollectionShare, preparePhotoShare, sendSharedCollectionOpen } from "./api.js";
 
 const config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
@@ -41,7 +41,7 @@ describe("prepared Telegram collection sharing", () => {
     }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const link = "https://t.me/indexarchivebot?startapp=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
+    const link = "https://t.me/indexarchivebot?start=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
     const result = await prepareCollectionShare(config, 99112233, { name: "TRAVEL", itemCount: 12 }, link, "latest-photo-file-id");
 
     expect(result.id).toBe("prepared-collection-id");
@@ -67,7 +67,7 @@ describe("prepared Telegram collection sharing", () => {
     }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const link = "https://t.me/indexarchivebot?startapp=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
+    const link = "https://t.me/indexarchivebot?start=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
     await prepareCollectionShare(config, 99112233, { name: "DOCUMENTS", itemCount: 3 }, link);
 
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -76,6 +76,27 @@ describe("prepared Telegram collection sharing", () => {
       type: "photo",
       photo_url: "https://index.example.com/brand/index-collection-cover.jpg",
       thumbnail_url: "https://index.example.com/brand/index-collection-cover.jpg"
+    });
+  });
+
+  it("opens the exact shared collection from the recipient's private bot chat", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      result: { message_id: 12, chat: { id: 99112233, type: "private" } }
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const token = "abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
+
+    await sendSharedCollectionOpen(config, 99112233, { name: "TRAVEL", itemCount: 12 }, token);
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(options.body)) as Record<string, any>;
+    expect(payload).toMatchObject({
+      chat_id: 99112233,
+      reply_markup: { inline_keyboard: [[{
+        text: "OPEN COLLECTION",
+        web_app: { url: `https://index.example.com?share=${token}` }
+      }]] }
     });
   });
 });

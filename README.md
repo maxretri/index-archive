@@ -79,7 +79,7 @@ pnpm build
 
 1. Message `@BotFather` and create a bot with `/newbot`.
 2. Put the token in server-only `BOT_TOKEN`.
-3. Put the bot username without `@` in `BOT_USERNAME`; it is used for shared-collection Mini App links.
+3. Put the bot username without `@` in `BOT_USERNAME`; it is used for shared-collection bot deep links.
 4. Deploy or expose the server and Mini App over HTTPS.
 5. Set `MINI_APP_URL` to the deployed web URL.
 6. Set a random `TELEGRAM_WEBHOOK_SECRET` of at least 16 characters.
@@ -119,7 +119,7 @@ RLS is enabled on every private table. The server service role bypasses RLS by d
 | Variable | Where | Purpose |
 |---|---|---|
 | `BOT_TOKEN` | server | Telegram Bot API secret |
-| `BOT_USERNAME` | server | Bot username used for Main Mini App share links |
+| `BOT_USERNAME` | server | Bot username used for reliable shared-collection deep links |
 | `TELEGRAM_WEBHOOK_SECRET` | server | Authenticates Telegram webhook requests |
 | `MINI_APP_URL` | server | Public HTTPS Mini App URL used by buttons |
 | `SUPABASE_URL` | server | Supabase project URL |
