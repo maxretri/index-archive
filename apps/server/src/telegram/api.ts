@@ -137,21 +137,27 @@ export async function prepareCollectionShare(
   config: Config,
   telegramUserId: number,
   collection: { name: string; itemCount: number },
-  link: string
+  link: string,
+  coverTelegramFileId?: string | null
 ) {
+  const message = `INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}\n\n${link}`;
+  const result = coverTelegramFileId ? {
+    type: "photo",
+    id: randomUUID(),
+    photo_file_id: coverTelegramFileId,
+    caption: message,
+    reply_markup: { inline_keyboard: [[{ text: "OPEN COLLECTION", url: link }]] }
+  } : {
+    type: "photo",
+    id: randomUUID(),
+    photo_url: `${config.MINI_APP_URL.replace(/\/$/, "")}/brand/index-collection-cover.jpg`,
+    thumbnail_url: `${config.MINI_APP_URL.replace(/\/$/, "")}/brand/index-collection-cover.jpg`,
+    caption: message,
+    reply_markup: { inline_keyboard: [[{ text: "OPEN COLLECTION", url: link }]] }
+  };
   return telegramCall<PreparedInlineMessage>(config, "savePreparedInlineMessage", JSON.stringify({
     user_id: telegramUserId,
-    result: {
-      type: "article",
-      id: randomUUID(),
-      title: `INDEX · ${collection.name}`,
-      description: `${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"} · READ ONLY`,
-      input_message_content: {
-        message_text: `INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}\n\n${link}`,
-        link_preview_options: { is_disabled: true }
-      },
-      reply_markup: { inline_keyboard: [[{ text: "OPEN COLLECTION", url: link }]] }
-    },
+    result,
     allow_user_chats: true,
     allow_bot_chats: true,
     allow_group_chats: true,

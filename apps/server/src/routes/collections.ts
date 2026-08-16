@@ -73,13 +73,17 @@ export async function collectionRoutes(app: FastifyInstance, services: Services,
     const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "Invalid collection" });
     const userId = request.sessionUser!.id;
-    const [{ data: collection, error }, countResult] = await Promise.all([
+    const [{ data: collection, error }, countResult, { data: coverMembership, error: coverError }] = await Promise.all([
       services.db.from("collections").select("id,name").eq("user_id", userId).eq("id", params.data.id).maybeSingle(),
       services.db.from("collection_files").select("file_id", { count: "exact", head: true })
-        .eq("user_id", userId).eq("collection_id", params.data.id)
+        .eq("user_id", userId).eq("collection_id", params.data.id),
+      services.db.from("collection_files").select("files!inner(telegram_file_id,file_type)")
+        .eq("user_id", userId).eq("collection_id", params.data.id).eq("files.file_type", "photo")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle()
     ]);
     if (error) throw error;
     if (countResult.error) throw countResult.error;
+    if (coverError) throw coverError;
     if (!collection) return reply.code(404).send({ error: "Collection not found" });
     const telegramUserId = Number(request.sessionUser!.telegramUserId);
     if (!Number.isSafeInteger(telegramUserId)) return reply.code(400).send({ error: "Invalid Telegram user" });
@@ -93,11 +97,13 @@ export async function collectionRoutes(app: FastifyInstance, services: Services,
     if (insertError) throw insertError;
 
     const link = `https://t.me/${services.config.BOT_USERNAME}?startapp=collection_${token}`;
+    const relatedCover = coverMembership?.files as unknown as { telegram_file_id?: string } | Array<{ telegram_file_id?: string }> | null;
+    const coverTelegramFileId = (Array.isArray(relatedCover) ? relatedCover[0] : relatedCover)?.telegram_file_id ?? null;
     try {
       const prepared = await prepareCollectionShare(services.config, telegramUserId, {
         name: collection.name as string,
         itemCount: countResult.count ?? 0
-      }, link);
+      }, link, coverTelegramFileId);
       return reply.send({ messageId: prepared.id, expiresAt: prepared.expiration_date, link });
     } catch (shareError) {
       await services.db.from("collection_shares").delete().eq("id", share.id).eq("user_id", userId);

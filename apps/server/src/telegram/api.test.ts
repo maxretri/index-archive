@@ -34,7 +34,7 @@ describe("prepared Telegram photo sharing", () => {
 });
 
 describe("prepared Telegram collection sharing", () => {
-  it("opens Telegram's recipient picker with a read-only collection link", async () => {
+  it("shares the newest collection photo as a full Telegram cover", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       ok: true,
       result: { id: "prepared-collection-id", expiration_date: 1_800_000_300 }
@@ -42,7 +42,7 @@ describe("prepared Telegram collection sharing", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const link = "https://t.me/indexarchivebot?startapp=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
-    const result = await prepareCollectionShare(config, 99112233, { name: "TRAVEL", itemCount: 12 }, link);
+    const result = await prepareCollectionShare(config, 99112233, { name: "TRAVEL", itemCount: 12 }, link, "latest-photo-file-id");
 
     expect(result.id).toBe("prepared-collection-id");
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -51,11 +51,31 @@ describe("prepared Telegram collection sharing", () => {
       user_id: 99112233,
       allow_user_chats: true,
       result: {
-        type: "article",
-        title: "INDEX · TRAVEL",
+        type: "photo",
+        photo_file_id: "latest-photo-file-id",
         reply_markup: { inline_keyboard: [[{ text: "OPEN COLLECTION", url: link }]] }
       }
     });
-    expect(payload.result.input_message_content.message_text).toContain(link);
+    expect(payload.result.caption).toContain("INDEX COLLECTION · TRAVEL");
+    expect(payload.result.caption).toContain(link);
+  });
+
+  it("uses the INDEX editorial cover when a collection has no photos", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      result: { id: "prepared-collection-id", expiration_date: 1_800_000_300 }
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const link = "https://t.me/indexarchivebot?startapp=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
+    await prepareCollectionShare(config, 99112233, { name: "DOCUMENTS", itemCount: 3 }, link);
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(options.body)) as Record<string, any>;
+    expect(payload.result).toMatchObject({
+      type: "photo",
+      photo_url: "https://index.example.com/brand/index-collection-cover.jpg",
+      thumbnail_url: "https://index.example.com/brand/index-collection-cover.jpg"
+    });
   });
 });

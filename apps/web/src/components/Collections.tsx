@@ -10,6 +10,7 @@ export function Collections({ onOpen }: { onOpen(collection: Collection): void }
   const [editing, setEditing] = useState<Collection>();
   const [editName, setEditName] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
   const collections = useQuery({ queryKey: ["collections"], queryFn: api.collections });
   const create = useMutation({
     mutationFn: () => api.createCollection(name),
@@ -30,10 +31,29 @@ export function Collections({ onOpen }: { onOpen(collection: Collection): void }
       ]);
     }
   });
-  const openEditor = (collection: Collection) => {
+  const share = useMutation({
+    mutationFn: (collection: Collection) => api.shareCollection(collection.id),
+    onSuccess: async ({ messageId, link }) => {
+      await queryClient.invalidateQueries({ queryKey: ["collections"] });
+      const webApp = window.Telegram?.WebApp;
+      if (webApp?.shareMessage) {
+        setShareNotice("");
+        webApp.shareMessage(messageId, (sent) => {
+          if (sent) webApp.HapticFeedback?.notificationOccurred("success");
+        });
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(link);
+        setShareNotice("LINK COPIED · OPEN INDEX IN TELEGRAM TO SHARE WITH A CONTACT");
+      } catch { setShareNotice("OPEN INDEX IN TELEGRAM TO SHARE"); }
+    },
+    onError: (error) => setShareNotice(error.message)
+  });
+  const openEditor = (collection: Collection, deleteImmediately = false) => {
     setEditing(collection);
     setEditName(collection.name);
-    setConfirmDelete(false);
+    setConfirmDelete(deleteImmediately);
     rename.reset();
     remove.reset();
   };
@@ -45,13 +65,18 @@ export function Collections({ onOpen }: { onOpen(collection: Collection): void }
       <button disabled={create.isPending || !name.trim()}>CREATE</button>
     </form>
     {create.error && <p className="form-error">{create.error.message}</p>}
+    {shareNotice && <p className="collection-share-notice">{shareNotice}</p>}
     <div className="collection-grid">
       {collections.data?.map((collection, index) => <article key={collection.id} className="collection-card">
         <button className="collection-open" onClick={() => onOpen(collection)}>
           <div className="collection-cover">{collection.coverFileId ? <PrivateImage fileId={collection.coverFileId} loading="lazy" /> : <span>{String(index + 1).padStart(2, "0")}</span>}</div>
           <strong>{collection.name}</strong><small>{collection.itemCount} {collection.itemCount === 1 ? "ITEM" : "ITEMS"}{collection.isShared ? " · SHARED" : ""}</small>
         </button>
-        <button className="collection-edit" aria-label={`Edit ${collection.name}`} onClick={() => openEditor(collection)}>EDIT</button>
+        <div className="collection-card-actions">
+          <button disabled={share.isPending} onClick={() => share.mutate(collection)}>{share.isPending && share.variables?.id === collection.id ? "PREPARING" : "SHARE"}</button>
+          <button aria-label={`Edit ${collection.name}`} onClick={() => openEditor(collection)}>EDIT</button>
+          <button aria-label={`Delete ${collection.name}`} onClick={() => openEditor(collection, true)}>DELETE</button>
+        </div>
       </article>)}
     </div>
     {!collections.isLoading && !collections.data?.length && <div className="empty-state"><p>NO COLLECTIONS YET</p><span>CREATE ONE FOR A PROJECT, PLACE OR PERSON.</span></div>}
