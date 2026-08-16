@@ -39,6 +39,7 @@ export const api = {
   },
   collections: () => request<Collection[]>("/api/collections"),
   createCollection: (name: string) => request<Collection>("/api/collections", { method: "POST", body: JSON.stringify({ name }) }),
+  renameCollection: (id: string, name: string) => request<{ id: string; name: string }>(`/api/collections/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   deleteCollection: (id: string) => request<void>(`/api/collections/${id}`, { method: "DELETE" }),
   shareCollection: (id: string) => request<{ messageId: string; expiresAt: number; link: string }>(`/api/collections/${id}/share`, { method: "POST" }),
   revokeCollectionShares: (id: string) => request<void>(`/api/collections/${id}/shares`, { method: "DELETE" }),

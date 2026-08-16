@@ -49,6 +49,23 @@ export async function collectionRoutes(app: FastifyInstance, services: Services,
     return reply.code(201).send({ id: data.id, name: data.name, createdAt: data.created_at, itemCount: 0, coverFileId: null, isShared: false });
   });
 
+  app.patch("/api/collections/:id", { preHandler: authenticate }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const body = z.object({ name: z.string().trim().min(1).max(80) }).safeParse(request.body);
+    if (!params.success) return reply.code(400).send({ error: "Invalid collection" });
+    if (!body.success) return reply.code(400).send({ error: "Collection name is required" });
+    const { data, error } = await services.db.from("collections")
+      .update({ name: body.data.name.toUpperCase() })
+      .eq("user_id", request.sessionUser!.id)
+      .eq("id", params.data.id)
+      .select("id,name")
+      .maybeSingle();
+    if (error?.code === "23505") return reply.code(409).send({ error: "Collection already exists" });
+    if (error) throw error;
+    if (!data) return reply.code(404).send({ error: "Collection not found" });
+    return reply.send({ id: data.id, name: data.name });
+  });
+
   app.post("/api/collections/:id/share", {
     preHandler: authenticate,
     config: { rateLimit: { max: 20, timeWindow: "1 minute" } }
