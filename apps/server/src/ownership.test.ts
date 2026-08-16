@@ -56,6 +56,27 @@ describe("ownership boundary", () => {
     await app.close();
   });
 
+  it("does not prepare a share for a file outside the signed-in user's archive", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const query = {
+      select() { return this; },
+      eq(column: string, value: unknown) { filters.push([column, value]); return this; },
+      maybeSingle() { return Promise.resolve({ data: null, error: null }); }
+    };
+    const app = await buildApp(config, { from: () => query } as never);
+    const userId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
+    const token = await createSession({ id: userId, telegramUserId: "100200300" }, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/files/ca02001b-8f4f-4dfc-b3ff-105bc67615f1/share",
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(filters).toContainEqual(["user_id", userId]);
+    await app.close();
+  });
+
   it("rejects webhook requests without Telegram's configured secret", async () => {
     const db = { from: () => { throw new Error("must not query"); } };
     const app = await buildApp(config, db as never);

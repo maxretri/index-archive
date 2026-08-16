@@ -6,6 +6,7 @@ interface TelegramWebApp {
   setHeaderColor(color: string): void;
   setBackgroundColor(color: string): void;
   enableClosingConfirmation(): void;
+  shareMessage(messageId: string, callback?: (success: boolean) => void): void;
   HapticFeedback?: { impactOccurred(style: "light" | "medium" | "heavy"): void; notificationOccurred(type: "error" | "success" | "warning"): void };
 }
 

@@ -3,7 +3,7 @@ import type { ArchiveFile, FileType, LibraryFilter } from "@index/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Services } from "../types.js";
-import { resolveTelegramFile } from "../telegram/api.js";
+import { preparePhotoShare, resolveTelegramFile } from "../telegram/api.js";
 
 const idSchema = z.string().uuid();
 const listSchema = z.object({
@@ -144,6 +144,27 @@ export async function fileRoutes(app: FastifyInstance, services: Services, authe
       reply.header("content-disposition", `attachment; filename="${safeName}"`);
     }
     return reply.send(Readable.fromWeb(upstream.body as never));
+  });
+
+  app.post("/api/files/:id/share", {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid share request" });
+    const { data, error } = await services.db.from("files")
+      .select("telegram_file_id,file_type")
+      .eq("user_id", request.sessionUser!.id)
+      .eq("id", params.data.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return reply.code(404).send({ error: "File not found" });
+    if (data.file_type !== "photo") return reply.code(400).send({ error: "Only photos can be forwarded" });
+
+    const telegramUserId = Number(request.sessionUser!.telegramUserId);
+    if (!Number.isSafeInteger(telegramUserId)) return reply.code(400).send({ error: "Invalid Telegram user" });
+    const prepared = await preparePhotoShare(services.config, telegramUserId, data.telegram_file_id as string);
+    return reply.send({ messageId: prepared.id, expiresAt: prepared.expiration_date });
   });
 
   app.patch("/api/files/:id/favorite", { preHandler: authenticate }, async (request, reply) => {

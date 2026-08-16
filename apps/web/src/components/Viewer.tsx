@@ -19,6 +19,7 @@ export function Viewer({ initialId, files, onClose }: Props) {
   const [tagText, setTagText] = useState(file.tags.join(", "));
   const [isFavorite, setIsFavorite] = useState(file.isFavorite);
   const [collectionIds, setCollectionIds] = useState(file.collectionIds);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -36,6 +37,7 @@ export function Viewer({ initialId, files, onClose }: Props) {
     setTagText(file.tags.join(", "));
     setIsFavorite(file.isFavorite);
     setCollectionIds(file.collectionIds);
+    setShareError(null);
     setPanel("none");
   }, [file.id, file.collectionIds, file.isFavorite, file.tags]);
 
@@ -52,6 +54,21 @@ export function Viewer({ initialId, files, onClose }: Props) {
     onSuccess: async (result) => { setCollectionIds(result.collectionIds); await invalidate(); }
   });
   const setTags = useMutation({ mutationFn: () => api.setTags(file.id, tagText.split(",").map((tag) => tag.trim()).filter(Boolean)), onSuccess: invalidate });
+  const share = useMutation({
+    mutationFn: () => api.prepareShare(file.id),
+    onSuccess: ({ messageId }) => {
+      const webApp = window.Telegram?.WebApp;
+      if (!webApp?.shareMessage) {
+        setShareError("UPDATE TELEGRAM TO FORWARD");
+        return;
+      }
+      setShareError(null);
+      webApp.shareMessage(messageId, (sent) => {
+        if (sent) webApp.HapticFeedback?.notificationOccurred("success");
+      });
+    },
+    onError: () => setShareError("FORWARD FAILED · TRY AGAIN")
+  });
 
   const navigate = (direction: -1 | 1) => {
     setIndex((value) => Math.max(0, Math.min(files.length - 1, value + direction)));
@@ -94,10 +111,12 @@ export function Viewer({ initialId, files, onClose }: Props) {
           <span>{new Date(file.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "long", year: "numeric" })}{file.fileSize ? ` · ${formatBytes(file.fileSize)}` : ""}{file.duration ? ` · ${formatDuration(file.duration)}` : ""}</span>
         </div>
         <div className="viewer-actions">
+          {file.type === "photo" && <button disabled={share.isPending} onClick={() => share.mutate()}>{share.isPending ? "PREPARING" : "FORWARD"}</button>}
           <button className={isFavorite ? "active" : ""} disabled={favorite.isPending} onClick={() => favorite.mutate()}>{isFavorite ? "FAVORITED" : "FAVORITE"}</button>
           <button onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
           <button onClick={() => setPanel(panel === "tags" ? "none" : "tags")}>TAGS</button>
         </div>
+        {shareError && <div className="viewer-action-error">{shareError}</div>}
         {panel === "collections" && <div className="viewer-panel">
           <span>ADD TO COLLECTION</span>
           {collections.data?.map((collection) => {

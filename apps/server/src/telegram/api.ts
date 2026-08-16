@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Config } from "../config.js";
 import type { TelegramMessage } from "../types.js";
 
@@ -43,6 +44,26 @@ export async function sendWelcomeReply(config: Config, chatId: number) {
     chat_id: chatId,
     text,
     reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]] }
+  }), { "content-type": "application/json" });
+}
+
+interface PreparedInlineMessage {
+  id: string;
+  expiration_date: number;
+}
+
+export async function preparePhotoShare(config: Config, telegramUserId: number, telegramFileId: string) {
+  return telegramCall<PreparedInlineMessage>(config, "savePreparedInlineMessage", JSON.stringify({
+    user_id: telegramUserId,
+    result: {
+      type: "photo",
+      id: randomUUID(),
+      photo_file_id: telegramFileId
+    },
+    allow_user_chats: true,
+    allow_bot_chats: true,
+    allow_group_chats: true,
+    allow_channel_chats: true
   }), { "content-type": "application/json" });
 }
 
