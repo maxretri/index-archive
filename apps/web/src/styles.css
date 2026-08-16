@@ -88,6 +88,9 @@ button:disabled { cursor: default; opacity: .42; }
 .bulk-sheet { width: 100%; max-height: min(72dvh, 620px); padding: 18px 16px calc(16px + var(--safe-bottom)); color: var(--ink); background: var(--paper); border-top: 1px solid var(--ink); }
 .bulk-sheet > header { display: flex; justify-content: space-between; padding-bottom: 15px; border-bottom: 1px solid var(--ink); }
 .bulk-sheet > header span, .bulk-sheet > header button { font-size: .57rem; letter-spacing: .1em; }
+.bulk-create { display: flex; border-bottom: 1px solid var(--ink); }
+.bulk-create input { flex: 1; min-width: 0; padding: 16px 1px; border: 0; outline: 0; background: transparent; font-size: .68rem; letter-spacing: .07em; }
+.bulk-create button { flex: 0 0 auto; padding-left: 14px; font-size: .53rem; letter-spacing: .09em; }
 .bulk-collection-list { max-height: 42dvh; overflow: auto; }
 .bulk-collection-list > button { width: 100%; padding: 15px 1px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); font-size: .67rem; letter-spacing: .08em; text-align: left; }
 .bulk-collection-list > button.active { font-weight: 600; }

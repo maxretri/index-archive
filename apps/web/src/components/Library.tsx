@@ -24,6 +24,7 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showCollections, setShowCollections] = useState(false);
   const [targetCollections, setTargetCollections] = useState<Set<string>>(new Set());
+  const [newCollectionName, setNewCollectionName] = useState("");
   const query = useInfiniteQuery({
     queryKey: ["files", filter, q, collectionId, from, to],
     queryFn: ({ pageParam }) => api.files({ filter, q, collectionId, from, to, cursor: pageParam }),
@@ -42,12 +43,22 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
   const loadMore = useCallback(() => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage(); }, [query]);
   const sentinel = useIntersection(loadMore, Boolean(query.hasNextPage));
   const collections = useQuery({ queryKey: ["collections"], queryFn: api.collections, enabled: showCollections });
+  const createCollection = useMutation({
+    mutationFn: () => api.createCollection(newCollectionName),
+    onSuccess: async (collection) => {
+      setNewCollectionName("");
+      setTargetCollections((current) => new Set(current).add(collection.id));
+      await queryClient.invalidateQueries({ queryKey: ["collections"] });
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
+    }
+  });
   const addToCollections = useMutation({
     mutationFn: () => api.addFilesToCollections([...selected], [...targetCollections]),
     onSuccess: async () => {
       setSelecting(false);
       setSelected(new Set());
       setTargetCollections(new Set());
+      setNewCollectionName("");
       setShowCollections(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["files"] }),
@@ -62,6 +73,7 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
     setSelected(new Set());
     setShowCollections(false);
     setTargetCollections(new Set());
+    setNewCollectionName("");
   }, [filter, q, collectionId, from, to]);
 
   const toggleFile = (id: string) => {
@@ -124,6 +136,14 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
       {showCollections && <div className="bulk-sheet-backdrop" role="presentation" onClick={() => setShowCollections(false)}>
         <section className="bulk-sheet" role="dialog" aria-modal="true" aria-label="Add selected files to collections" onClick={(event) => event.stopPropagation()}>
           <header><span>ADD {selected.size} {selected.size === 1 ? "ITEM" : "ITEMS"} TO</span><button onClick={() => setShowCollections(false)}>CLOSE</button></header>
+          <form className="bulk-create" onSubmit={(event) => {
+            event.preventDefault();
+            if (newCollectionName.trim()) createCollection.mutate();
+          }}>
+            <input value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)} placeholder="NEW COLLECTION" maxLength={80} aria-label="New collection name" />
+            <button disabled={!newCollectionName.trim() || createCollection.isPending}>{createCollection.isPending ? "CREATING" : "CREATE + SELECT"}</button>
+          </form>
+          {createCollection.error && <p className="bulk-error">{createCollection.error.message}</p>}
           <div className="bulk-collection-list">
             {collections.data?.map((collection) => {
               const active = targetCollections.has(collection.id);
@@ -133,7 +153,7 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
                 return next;
               })}><span>{collection.name}</span><small>{active ? "●" : "○"}</small></button>;
             })}
-            {!collections.isLoading && !collections.data?.length && <p>CREATE A COLLECTION FIRST.</p>}
+            {!collections.isLoading && !collections.data?.length && <p>NO COLLECTIONS YET. CREATE ONE ABOVE.</p>}
           </div>
           {addToCollections.error && <p className="bulk-error">{addToCollections.error.message}</p>}
           <button className="bulk-confirm" disabled={!targetCollections.size || addToCollections.isPending} onClick={() => addToCollections.mutate()}>
