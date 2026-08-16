@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Config } from "./config.js";
 import { buildApp } from "./app.js";
 import { createFilePreviewToken, createSession } from "./security/session.js";
+import { createCollectionShareToken, hashCollectionShareToken } from "./security/collection-share.js";
 
 const config: Config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
+  BOT_USERNAME: "indexarchivebot",
   TELEGRAM_WEBHOOK_SECRET: "webhook-secret-is-long",
   MINI_APP_URL: "https://index.example.com",
   SUPABASE_URL: "https://example.supabase.co",
@@ -131,6 +133,45 @@ describe("ownership boundary", () => {
     expect(response.statusCode).toBe(400);
     expect(filters).toContainEqual(["files", "user_id", userId]);
     expect(filters).toContainEqual(["collections", "user_id", userId]);
+    await app.close();
+  });
+
+  it("does not expose a file that is outside the linked shared collection", async () => {
+    const ownerId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
+    const recipientId = "76677226-2cb0-453e-99a4-0db75e4a8751";
+    const collectionId = "da3ad9ee-05dc-4844-8941-6b764e431406";
+    const fileId = "ca02001b-8f4f-4dfc-b3ff-105bc67615f1";
+    const shareToken = createCollectionShareToken();
+    const filters: Array<[string, string, unknown]> = [];
+    const database = {
+      from(table: string) {
+        if (table === "files") throw new Error("must not read an unrelated file");
+        const chain = {
+          select() { return this; },
+          eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          is(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          maybeSingle() {
+            return Promise.resolve({
+              data: table === "collection_shares" ? { id: "share-id", user_id: ownerId, collection_id: collectionId } : null,
+              error: null
+            });
+          }
+        };
+        return chain;
+      }
+    };
+    const app = await buildApp(config, database as never);
+    const session = await createSession({ id: recipientId, telegramUserId: "998877" }, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/shared-collections/files/${fileId}/content?variant=original`,
+      headers: { authorization: `Bearer ${session}`, "x-index-share-token": shareToken }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(filters).toContainEqual(["collection_shares", "token_hash", hashCollectionShareToken(shareToken)]);
+    expect(filters).toContainEqual(["collection_files", "collection_id", collectionId]);
+    expect(filters).toContainEqual(["collection_files", "file_id", fileId]);
     await app.close();
   });
 

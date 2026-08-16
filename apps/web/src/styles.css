@@ -130,6 +130,19 @@ button:disabled { cursor: default; opacity: .42; }
 .collection-cover span { color: #aaa; font-size: 2.5rem; font-weight: 300; letter-spacing: -.08em; }
 .collection-card strong { display: block; margin-top: 8px; overflow: hidden; font-size: .68rem; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
 .collection-card small { display: block; margin-top: 3px; color: var(--grey); font-size: .52rem; letter-spacing: .09em; }
+.collection-share-actions { min-height: 43px; padding: 0 2px; display: flex; align-items: center; gap: 20px; overflow-x: auto; border-bottom: 1px solid var(--ink); scrollbar-width: none; }
+.collection-share-actions::-webkit-scrollbar { display: none; }
+.collection-share-actions button, .collection-share-actions span, .shared-label { flex: 0 0 auto; font-size: .54rem; letter-spacing: .1em; }
+.collection-share-actions button { padding: 0; }
+.collection-share-actions button:nth-of-type(3) { color: var(--grey); }
+.collection-share-actions span { margin-left: auto; color: var(--grey); }
+.shared-label { align-self: flex-end; padding-bottom: 4px; color: var(--grey); }
+.shared-main { width: 100%; padding: 0 10px calc(28px + var(--safe-bottom)); }
+.shared-unavailable { align-self: flex-end; max-width: 420px; }
+.shared-unavailable p { margin: 0 0 10px; font-size: 1.4rem; letter-spacing: -.03em; }
+.shared-unavailable span { color: var(--grey); font-size: .58rem; line-height: 1.5; letter-spacing: .1em; }
+.shared-readonly { margin-top: 14px; color: #777; font-size: .5rem; letter-spacing: .1em; }
+.audio-preview { width: min(82%, 520px); }
 
 .viewer { position: fixed; z-index: 100; inset: 0; display: grid; grid-template-rows: calc(48px + var(--safe-top)) minmax(0, 1fr) auto; color: #f7f7f3; background: #0b0b0b; }
 .viewer-header { padding: var(--safe-top) 14px 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 1px solid #333; }
@@ -177,6 +190,7 @@ button:disabled { cursor: default; opacity: .42; }
   .side-nav button span { font-size: .4rem; }
   .nav-break { height: 16px; }
   .main-content { padding: 0 18px 30px; }
+  .shared-main { padding: 0 24px 30px; }
   .page-heading { min-height: 160px; padding: 38px 3px 16px; }
   .library-filters { margin: 0; padding: 0 3px; gap: 28px; }
   .media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }

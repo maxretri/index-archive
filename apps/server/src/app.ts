@@ -10,6 +10,7 @@ import { collectionRoutes } from "./routes/collections.js";
 import { fileRoutes } from "./routes/files.js";
 import { uploadRoutes } from "./routes/upload.js";
 import { webhookRoutes } from "./routes/webhook.js";
+import { sharedCollectionRoutes } from "./routes/shared-collections.js";
 
 export async function buildApp(config: Config, database = createDatabase(config)) {
   const app = Fastify({
@@ -21,7 +22,7 @@ export async function buildApp(config: Config, database = createDatabase(config)
     bodyLimit: 1_048_576
   });
   const origins = config.WEB_ORIGIN.split(",").map((origin) => origin.trim());
-  await app.register(cors, { origin: origins, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], allowedHeaders: ["authorization", "content-type"] });
+  await app.register(cors, { origin: origins, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], allowedHeaders: ["authorization", "content-type", "x-index-share-token"] });
   await app.register(rateLimit, { max: 180, timeWindow: "1 minute" });
   await app.register(multipart, { limits: { files: 1, fileSize: config.MAX_UPLOAD_BYTES, fields: 2 } });
 
@@ -32,6 +33,7 @@ export async function buildApp(config: Config, database = createDatabase(config)
   await webhookRoutes(app, services);
   await fileRoutes(app, services, authenticate);
   await collectionRoutes(app, services, authenticate);
+  await sharedCollectionRoutes(app, services, authenticate);
   await uploadRoutes(app, services, authenticate);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {

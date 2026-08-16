@@ -6,6 +6,7 @@ import { fileTypesForFilter } from "./files.js";
 
 const config: Config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
+  BOT_USERNAME: "indexarchivebot",
   TELEGRAM_WEBHOOK_SECRET: "webhook-secret-is-long",
   MINI_APP_URL: "https://index.example.com",
   SUPABASE_URL: "https://example.supabase.co",

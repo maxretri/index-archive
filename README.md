@@ -27,6 +27,7 @@ The bot only indexes files a user explicitly sends, forwards, or uploads. Origin
 - Telegram-hosted thumbnails, lazy loading, and reserved image aspect ratios
 - Fullscreen photo, video, and PDF viewers with mobile swipe navigation
 - Original download/open, favorites, tags, and virtual multi-file collections
+- Revocable read-only collection links shared through Telegram's native recipient picker
 - Search across filename, type, MIME type, caption, tags, collections, and date range
 - Mini App uploads with progress; the server sends the binary through Telegram before indexing it
 - Mobile-first Telegram viewport and safe-area behavior
@@ -62,7 +63,7 @@ printf 'VITE_API_URL=http://localhost:4000\n' > apps/web/.env
 pnpm dev
 ```
 
-Apply both SQL files in `supabase/migrations/` to the Supabase project, then fill all values in `apps/server/.env`. The Mini App cannot receive real Telegram `initData` when opened as a normal localhost tab; open it through Telegram using an HTTPS development tunnel. There is intentionally no mock-login bypass.
+Apply the ordered SQL files in `supabase/migrations/` to the Supabase project, then fill all values in `apps/server/.env`. The Mini App cannot receive real Telegram `initData` when opened as a normal localhost tab; open it through Telegram using an HTTPS development tunnel. There is intentionally no mock-login bypass.
 
 Useful checks:
 
@@ -76,10 +77,11 @@ pnpm build
 
 1. Message `@BotFather` and create a bot with `/newbot`.
 2. Put the token in server-only `BOT_TOKEN`.
-3. Deploy or expose the server and Mini App over HTTPS.
-4. Set `MINI_APP_URL` to the deployed web URL.
-5. Set a random `TELEGRAM_WEBHOOK_SECRET` of at least 16 characters.
-6. Configure the webhook and the bot menu button:
+3. Put the bot username without `@` in `BOT_USERNAME`; it is used for shared-collection Mini App links.
+4. Deploy or expose the server and Mini App over HTTPS.
+5. Set `MINI_APP_URL` to the deployed web URL.
+6. Set a random `TELEGRAM_WEBHOOK_SECRET` of at least 16 characters.
+7. Configure the webhook and the bot menu button:
 
 ```bash
 pnpm --filter @index/server bot:setup https://api.index.example
@@ -103,6 +105,7 @@ RLS is enabled on every private table. The server service role bypasses RLS by d
 | Variable | Where | Purpose |
 |---|---|---|
 | `BOT_TOKEN` | server | Telegram Bot API secret |
+| `BOT_USERNAME` | server | Bot username used for Main Mini App share links |
 | `TELEGRAM_WEBHOOK_SECRET` | server | Authenticates Telegram webhook requests |
 | `MINI_APP_URL` | server | Public HTTPS Mini App URL used by buttons |
 | `SUPABASE_URL` | server | Supabase project URL |
@@ -122,6 +125,7 @@ See [.env.example](.env.example) for the complete list.
 - Bot webhooks require Telegram's secret header.
 - Telegram file IDs and bot tokens never appear in metadata responses.
 - Binary endpoints check ownership before resolving a Telegram file path.
+- Collection links are random capability tokens; Postgres stores only their SHA-256 hashes. Shared views are read-only, membership-scoped, Telegram-authenticated, and revocable by the owner.
 - Upload counts and sizes are limited; filenames and response headers are sanitized.
 - Authentication and webhook secrets are redacted from server logs.
 

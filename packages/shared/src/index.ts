@@ -24,6 +24,13 @@ export interface Collection {
   createdAt: string;
   itemCount: number;
   coverFileId: string | null;
+  isShared: boolean;
+}
+
+export interface SharedCollectionPage {
+  collection: { name: string; itemCount: number };
+  items: ArchiveFile[];
+  nextCursor: string | null;
 }
 
 export interface PaginatedFiles {

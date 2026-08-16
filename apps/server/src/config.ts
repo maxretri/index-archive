@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const schema = z.object({
   BOT_TOKEN: z.string().min(20),
+  BOT_USERNAME: z.string().regex(/^[A-Za-z0-9_]{5,32}$/).default("indexarchivebot"),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(16),
   MINI_APP_URL: z.string().url(),
   SUPABASE_URL: z.string().url(),

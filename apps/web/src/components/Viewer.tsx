@@ -3,17 +3,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ArchiveFile } from "@index/shared";
 import { formatBytes, formatDuration } from "@index/shared";
 import { api } from "../api";
-import { PrivateImage, PrivateVideo } from "./PrivateMedia";
+import { PrivateImage, PrivateVideo, SharedImage, SharedVideo } from "./PrivateMedia";
+import { useSharedObjectUrl } from "../hooks";
 
-interface Props { initialId: string; files: ArchiveFile[]; onClose(): void }
+interface Props { initialId: string; files: ArchiveFile[]; sharedToken?: string; onClose(): void }
 
-export function Viewer({ initialId, files, onClose }: Props) {
+export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
   const initialIndex = Math.max(0, files.findIndex((file) => file.id === initialId));
   const [index, setIndex] = useState(initialIndex);
   const file = files[index]!;
   const queryClient = useQueryClient();
   const touchX = useRef<number | null>(null);
-  const collections = useQuery({ queryKey: ["collections"], queryFn: api.collections });
+  const collections = useQuery({ queryKey: ["collections"], queryFn: api.collections, enabled: !sharedToken });
   const [panel, setPanel] = useState<"none" | "collections" | "tags">("none");
   const [tagText, setTagText] = useState(file.tags.join(", "));
   const [isFavorite, setIsFavorite] = useState(file.isFavorite);
@@ -74,7 +75,9 @@ export function Viewer({ initialId, files, onClose }: Props) {
     window.Telegram?.WebApp.HapticFeedback?.impactOccurred("light");
   };
   const download = async () => {
-    const blob = await api.content(file.id, "original", true);
+    const blob = sharedToken
+      ? await api.sharedContent(file.id, sharedToken, "original", true)
+      : await api.content(file.id, "original", true);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -100,7 +103,7 @@ export function Viewer({ initialId, files, onClose }: Props) {
 
       <div className="viewer-stage">
         <button className="viewer-nav previous" disabled={index === 0} onClick={() => navigate(-1)} aria-label="Previous">‹</button>
-        <FilePreview file={file} />
+        <FilePreview file={file} sharedToken={sharedToken} />
         <button className="viewer-nav next" disabled={index === files.length - 1} onClick={() => navigate(1)} aria-label="Next">›</button>
       </div>
 
@@ -109,12 +112,13 @@ export function Viewer({ initialId, files, onClose }: Props) {
           <strong>{file.filename ?? file.type.toUpperCase()}</strong>
           <span>{new Date(file.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "long", year: "numeric" })}{file.fileSize ? ` · ${formatBytes(file.fileSize)}` : ""}{file.duration ? ` · ${formatDuration(file.duration)}` : ""}</span>
         </div>
-        <div className="viewer-actions">
+        {!sharedToken && <div className="viewer-actions">
           {file.type === "photo" && <button disabled={share.isPending} onClick={() => share.mutate()}>{share.isPending ? "PREPARING" : "FORWARD"}</button>}
           <button className={isFavorite ? "active" : ""} disabled={favorite.isPending} onClick={() => favorite.mutate()}>{isFavorite ? "FAVORITED" : "FAVORITE"}</button>
           <button onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
           <button onClick={() => setPanel(panel === "tags" ? "none" : "tags")}>TAGS</button>
-        </div>
+        </div>}
+        {sharedToken && <div className="shared-readonly">SHARED COLLECTION · READ ONLY</div>}
         {shareError && <div className="viewer-action-error">{shareError}</div>}
         {panel === "collections" && <div className="viewer-panel">
           <span>ADD TO COLLECTION</span>
@@ -137,11 +141,28 @@ export function Viewer({ initialId, files, onClose }: Props) {
   );
 }
 
-function FilePreview({ file }: { file: ArchiveFile }) {
-  if (file.type === "photo") return <PrivateImage fileId={file.id} variant="original" alt={file.filename ?? "Archived photo"} />;
-  if (file.type === "video") return <PrivateVideo fileId={file.id} />;
-  if (file.mimeType === "application/pdf") return <PdfPreview fileId={file.id} />;
+function FilePreview({ file, sharedToken }: { file: ArchiveFile; sharedToken?: string }) {
+  if (file.type === "photo") return sharedToken
+    ? <SharedImage fileId={file.id} shareToken={sharedToken} variant="original" alt={file.filename ?? "Shared photo"} />
+    : <PrivateImage fileId={file.id} variant="original" alt={file.filename ?? "Archived photo"} />;
+  if (file.type === "video") return sharedToken ? <SharedVideo fileId={file.id} shareToken={sharedToken} /> : <PrivateVideo fileId={file.id} />;
+  if (file.mimeType === "application/pdf") return sharedToken ? <SharedPdfPreview fileId={file.id} shareToken={sharedToken} /> : <PdfPreview fileId={file.id} />;
+  if (file.type === "audio" && sharedToken) return <SharedAudio fileId={file.id} shareToken={sharedToken} />;
   return <div className="document-preview"><b>{file.filename?.split(".").at(-1)?.toUpperCase() ?? file.type.toUpperCase()}</b><span>{file.filename ?? "UNTITLED FILE"}</span><small>SELECT DOWNLOAD TO OPEN THE ORIGINAL</small></div>;
+}
+
+function SharedPdfPreview({ fileId, shareToken }: { fileId: string; shareToken: string }) {
+  const { url, isLoading, isError } = useSharedObjectUrl(fileId, shareToken, "original");
+  if (isError) return <div className="viewer-loading">PDF UNAVAILABLE</div>;
+  if (isLoading || !url) return <div className="viewer-loading">OPENING PDF</div>;
+  return <iframe className="pdf-preview" src={`${url}#view=FitH`} title="Shared PDF preview" />;
+}
+
+function SharedAudio({ fileId, shareToken }: { fileId: string; shareToken: string }) {
+  const { url, isLoading, isError } = useSharedObjectUrl(fileId, shareToken, "original");
+  if (isError) return <div className="viewer-loading">AUDIO UNAVAILABLE</div>;
+  if (isLoading || !url) return <div className="viewer-loading">LOADING AUDIO</div>;
+  return <audio className="audio-preview" src={url} controls autoPlay />;
 }
 
 function PdfPreview({ fileId }: { fileId: string }) {

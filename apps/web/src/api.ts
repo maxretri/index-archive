@@ -1,4 +1,4 @@
-import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles } from "@index/shared";
+import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles, SharedCollectionPage } from "@index/shared";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const sessionKey = "index.session";
@@ -36,6 +36,8 @@ export const api = {
   collections: () => request<Collection[]>("/api/collections"),
   createCollection: (name: string) => request<Collection>("/api/collections", { method: "POST", body: JSON.stringify({ name }) }),
   deleteCollection: (id: string) => request<void>(`/api/collections/${id}`, { method: "DELETE" }),
+  shareCollection: (id: string) => request<{ messageId: string; expiresAt: number; link: string }>(`/api/collections/${id}/share`, { method: "POST" }),
+  revokeCollectionShares: (id: string) => request<void>(`/api/collections/${id}/shares`, { method: "DELETE" }),
   addFilesToCollections: (fileIds: string[], collectionIds: string[]) => request<{ fileCount: number; collectionIds: string[] }>("/api/collections/files", {
     method: "POST",
     body: JSON.stringify({ fileIds, collectionIds })
@@ -53,6 +55,21 @@ export const api = {
   pdfPreviewUrl: async (id: string) => {
     const result = await request<{ token: string; expiresIn: number }>(`/api/files/${id}/preview-token`, { method: "POST" });
     return `${API_URL}/api/files/${id}/preview?access=${encodeURIComponent(result.token)}`;
+  },
+  sharedCollection: (token: string, cursor?: string) => request<SharedCollectionPage>("/api/shared-collections/open", {
+    method: "POST",
+    body: JSON.stringify({ token, cursor, limit: 30 })
+  }),
+  sharedContent: async (id: string, shareToken: string, variant: "thumbnail" | "original" = "original", download = false) => {
+    const token = getSession();
+    const response = await fetch(`${API_URL}/api/shared-collections/files/${id}/content?variant=${variant}&download=${download}`, {
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        "x-index-share-token": shareToken
+      }
+    });
+    if (!response.ok) throw new Error("Shared file unavailable");
+    return response.blob();
   },
   upload: (file: File, onProgress: (progress: number) => void) => new Promise<{ id: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();

@@ -133,6 +133,32 @@ export async function preparePhotoShare(config: Config, telegramUserId: number, 
   }), { "content-type": "application/json" });
 }
 
+export async function prepareCollectionShare(
+  config: Config,
+  telegramUserId: number,
+  collection: { name: string; itemCount: number },
+  link: string
+) {
+  return telegramCall<PreparedInlineMessage>(config, "savePreparedInlineMessage", JSON.stringify({
+    user_id: telegramUserId,
+    result: {
+      type: "article",
+      id: randomUUID(),
+      title: `INDEX · ${collection.name}`,
+      description: `${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"} · READ ONLY`,
+      input_message_content: {
+        message_text: `INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}\n\n${link}`,
+        link_preview_options: { is_disabled: true }
+      },
+      reply_markup: { inline_keyboard: [[{ text: "OPEN COLLECTION", url: link }]] }
+    },
+    allow_user_chats: true,
+    allow_bot_chats: true,
+    allow_group_chats: true,
+    allow_channel_chats: true
+  }), { "content-type": "application/json" });
+}
+
 export async function sendUploadToTelegram(
   config: Config,
   chatId: number,

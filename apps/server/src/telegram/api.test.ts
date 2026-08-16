@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
-import { preparePhotoShare } from "./api.js";
+import { prepareCollectionShare, preparePhotoShare } from "./api.js";
 
 const config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
@@ -30,5 +30,32 @@ describe("prepared Telegram photo sharing", () => {
       allow_channel_chats: true,
       result: { type: "photo", photo_file_id: "telegram-photo-file-id" }
     });
+  });
+});
+
+describe("prepared Telegram collection sharing", () => {
+  it("opens Telegram's recipient picker with a read-only collection link", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      result: { id: "prepared-collection-id", expiration_date: 1_800_000_300 }
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const link = "https://t.me/indexarchivebot?startapp=collection_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
+    const result = await prepareCollectionShare(config, 99112233, { name: "TRAVEL", itemCount: 12 }, link);
+
+    expect(result.id).toBe("prepared-collection-id");
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(options.body)) as Record<string, any>;
+    expect(payload).toMatchObject({
+      user_id: 99112233,
+      allow_user_chats: true,
+      result: {
+        type: "article",
+        title: "INDEX · TRAVEL",
+        reply_markup: { inline_keyboard: [[{ text: "OPEN COLLECTION", url: link }]] }
+      }
+    });
+    expect(payload.result.input_message_content.message_text).toContain(link);
   });
 });
