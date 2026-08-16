@@ -18,16 +18,31 @@ describe("shared collection bot deep links", () => {
     expect(sharedCollectionTokenFromStart(`/start other_${token}`)).toBeNull();
   });
 
-  it("resolves the capability and replies with the exact collection opener", async () => {
+  it("copies the collection files into the recipient chat and replies with the exact collection opener", async () => {
     const filters: Array<[string, string, unknown]> = [];
     const ownerId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
     const collectionId = "da3ad9ee-05dc-4844-8941-6b764e431406";
     const database = {
       from(table: string) {
+        let selection = "";
         const chain = {
-          select() { return this; },
+          select(columns: string, options?: { head?: boolean }) {
+            selection = options?.head ? "count" : columns.includes("files!inner") ? "memberships" : "single";
+            return this;
+          },
           eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
           is(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          order() { return this; },
+          limit() {
+            if (selection !== "memberships") return this;
+            return Promise.resolve({
+              data: [{
+                created_at: "2026-08-16T10:00:00.000Z",
+                files: { telegram_chat_id: 112233, telegram_message_id: 91 }
+              }],
+              error: null
+            });
+          },
           maybeSingle() {
             return Promise.resolve({
               data: table === "collection_shares"
@@ -37,16 +52,22 @@ describe("shared collection bot deep links", () => {
             });
           },
           then(onfulfilled: (value: { count: number; error: null }) => unknown) {
+            if (selection !== "count") throw new Error(`Unexpected await for ${selection}`);
             return Promise.resolve({ count: 4, error: null }).then(onfulfilled);
           }
         };
         return chain;
       }
     };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      ok: true,
-      result: { message_id: 12, chat: { id: 445566, type: "private" } }
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        result: [{ message_id: 12 }]
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        result: { message_id: 13, chat: { id: 445566, type: "private" } }
+      }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     const services = {
       db: database,
@@ -66,8 +87,16 @@ describe("shared collection bot deep links", () => {
 
     expect(handled).toBe(true);
     expect(filters).toContainEqual(["collection_shares", "token_hash", hashCollectionShareToken(token)]);
-    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const payload = JSON.parse(String(options.body)) as Record<string, any>;
-    expect(payload.reply_markup.inline_keyboard[0][0].web_app.url).toBe(`https://index.example.com?share=${token}`);
+    const [copyUrl, copyOptions] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(copyUrl).toContain("/copyMessages");
+    expect(JSON.parse(String(copyOptions.body))).toEqual({
+      chat_id: 445566,
+      from_chat_id: 112233,
+      message_ids: [91]
+    });
+    const [, openOptions] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const openPayload = JSON.parse(String(openOptions.body)) as Record<string, any>;
+    expect(openPayload.text).toContain("1 FILE SENT TO THIS CHAT");
+    expect(openPayload.reply_markup.inline_keyboard[0][0].web_app.url).toBe(`https://index.example.com?share=${token}`);
   });
 });

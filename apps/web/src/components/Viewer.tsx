@@ -125,10 +125,10 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
         </div>
         {!sharedToken && <div className="viewer-actions">
           {file.type === "photo" && <button disabled={share.isPending} onClick={() => share.mutate()}>{share.isPending ? "PREPARING" : "FORWARD"}</button>}
+          <button className="delete-action" onClick={() => { setPanel("none"); setConfirmDelete(true); }}>DELETE</button>
           <button className={isFavorite ? "active" : ""} disabled={favorite.isPending} onClick={() => favorite.mutate()}>{isFavorite ? "FAVORITED" : "FAVORITE"}</button>
           <button onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
           <button onClick={() => setPanel(panel === "tags" ? "none" : "tags")}>TAGS</button>
-          <button className="delete-action" onClick={() => { setPanel("none"); setConfirmDelete(true); }}>DELETE</button>
         </div>}
         {sharedToken && <div className="shared-readonly">SHARED COLLECTION · READ ONLY</div>}
         {shareError && <div className="viewer-action-error">{shareError}</div>}

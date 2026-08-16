@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
-import { prepareCollectionShare, preparePhotoShare, sendSharedCollectionOpen } from "./api.js";
+import { copyTelegramMessages, prepareCollectionShare, preparePhotoShare, sendSharedCollectionOpen } from "./api.js";
 
 const config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
@@ -97,6 +97,27 @@ describe("prepared Telegram collection sharing", () => {
         text: "OPEN COLLECTION",
         web_app: { url: `https://index.example.com?share=${token}` }
       }]] }
+    });
+  });
+});
+
+describe("Telegram-native collection delivery", () => {
+  it("copies a batch of archived messages directly into the recipient bot chat", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      result: [{ message_id: 201 }, { message_id: 202 }]
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const copied = await copyTelegramMessages(config, 99112233, 44556677, [12, 13]);
+
+    expect(copied).toEqual([{ message_id: 201 }, { message_id: 202 }]);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/copyMessages");
+    expect(JSON.parse(String(options.body))).toEqual({
+      chat_id: 99112233,
+      from_chat_id: 44556677,
+      message_ids: [12, 13]
     });
   });
 });

@@ -69,12 +69,16 @@ export async function sendSharedCollectionOpen(
   config: Config,
   chatId: number,
   collection: { name: string; itemCount: number },
-  token: string
+  token: string,
+  delivery?: { copiedCount: number; truncated: boolean }
 ) {
   const separator = config.MINI_APP_URL.includes("?") ? "&" : "?";
+  const deliveryText = delivery
+    ? `\n${delivery.copiedCount} ${delivery.copiedCount === 1 ? "FILE" : "FILES"} SENT TO THIS CHAT${delivery.truncated ? " · OPEN INDEX FOR THE REST" : ""}`
+    : "";
   return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
     chat_id: chatId,
-    text: `SHARED INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}\nREAD ONLY`,
+    text: `SHARED INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}${deliveryText}\nREAD ONLY`,
     reply_markup: { inline_keyboard: [[{
       text: "OPEN COLLECTION",
       web_app: { url: `${config.MINI_APP_URL}${separator}share=${encodeURIComponent(token)}` }
@@ -141,6 +145,14 @@ export async function answerCallback(config: Config, callbackQueryId: string, te
 export async function deleteTelegramMessages(config: Config, chatId: number, messageIds: number[]) {
   return telegramCall<boolean>(config, "deleteMessages", JSON.stringify({
     chat_id: chatId,
+    message_ids: messageIds
+  }), { "content-type": "application/json" });
+}
+
+export async function copyTelegramMessages(config: Config, chatId: number, fromChatId: number, messageIds: number[]) {
+  return telegramCall<Array<{ message_id: number }>>(config, "copyMessages", JSON.stringify({
+    chat_id: chatId,
+    from_chat_id: fromChatId,
     message_ids: messageIds
   }), { "content-type": "application/json" });
 }
