@@ -17,21 +17,25 @@ async function telegramCall<T>(config: Config, method: string, body?: BodyInit, 
   return envelope.result;
 }
 
-export async function sendSavedReply(config: Config, chatId: number, messageId: number) {
+const openIndexMarkup = (config: Config) => ({
+  inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]]
+});
+
+export async function sendSavedReply(config: Config, chatId: number, messageId: number, collectionName?: string | null) {
   return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
     chat_id: chatId,
     reply_to_message_id: messageId,
-    text: "SAVED TO INDEX.",
-    reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]] }
+    text: collectionName ? `SAVED TO INDEX.\nCOLLECTION · ${collectionName}` : "SAVED TO INDEX.",
+    reply_markup: openIndexMarkup(config)
   }), { "content-type": "application/json" });
 }
 
-export async function sendMediaGroupSavedReply(config: Config, chatId: number, messageId: number, itemCount: number) {
+export async function sendMediaGroupSavedReply(config: Config, chatId: number, messageId: number, itemCount: number, collectionName?: string | null) {
   return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
     chat_id: chatId,
     reply_to_message_id: messageId,
-    text: `GROUP SAVED TO INDEX.\n${itemCount} ITEMS INDEXED.`,
-    reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]] }
+    text: `GROUP SAVED TO INDEX.\n${itemCount} ITEMS INDEXED.${collectionName ? `\nCOLLECTION · ${collectionName}` : ""}`,
+    reply_markup: openIndexMarkup(config)
   }), { "content-type": "application/json" });
 }
 
@@ -46,13 +50,65 @@ export async function sendWelcomeReply(config: Config, chatId: number) {
     "Отправляйте или пересылайте сюда фото, видео, документы и аудио. Они появятся в вашем личном архиве.",
     "",
     "We only index files you explicitly send. We never read your chats.",
-    "Мы индексируем только то, что вы отправляете. Мы не читаем ваши чаты."
+    "Мы индексируем только то, что вы отправляете. Мы не читаем ваши чаты.",
+    "",
+    "/collections — choose a collection / выбрать коллекцию",
+    "/newcollection NAME — create one / создать коллекцию",
+    "/nocollection — save without one / сохранять без коллекции"
   ].join("\n");
 
   return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
     chat_id: chatId,
     text,
-    reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]] }
+    reply_markup: openIndexMarkup(config)
+  }), { "content-type": "application/json" });
+}
+
+export interface TelegramCollectionChoice { id: string; name: string }
+
+export async function sendCollectionPicker(
+  config: Config,
+  chatId: number,
+  collections: TelegramCollectionChoice[],
+  activeCollectionId: string | null
+) {
+  const active = collections.find((collection) => collection.id === activeCollectionId);
+  type InlineButton = { text: string; callback_data?: string; web_app?: { url: string } };
+  const rows: InlineButton[][] = collections.map((collection) => [{
+    text: `${collection.id === activeCollectionId ? "✓ " : ""}${collection.name}`,
+    callback_data: `index:collection:${collection.id}`
+  }]);
+  rows.push([{ text: "+ NEW COLLECTION", callback_data: "index:collection:new" }]);
+  rows.push([{ text: "NO COLLECTION", callback_data: "index:collection:none" }]);
+  rows.push([{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]);
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: `CHOOSE WHERE NEW FILES GO.\nACTIVE · ${active?.name ?? "NO COLLECTION"}`,
+    reply_markup: { inline_keyboard: rows }
+  }), { "content-type": "application/json" });
+}
+
+export async function sendCollectionStatus(config: Config, chatId: number, collectionName: string | null) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: collectionName
+      ? `ACTIVE COLLECTION · ${collectionName}\nNEW FILES WILL BE ADDED HERE.`
+      : "NO ACTIVE COLLECTION.\nNEW FILES WILL STAY IN THE MAIN INDEX.",
+    reply_markup: openIndexMarkup(config)
+  }), { "content-type": "application/json" });
+}
+
+export async function sendNewCollectionPrompt(config: Config, chatId: number) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: "CREATE A COLLECTION:\n/newcollection TRAVEL\n\nСОЗДАТЬ КОЛЛЕКЦИЮ:\n/newcollection ПУТЕШЕСТВИЯ"
+  }), { "content-type": "application/json" });
+}
+
+export async function answerCallback(config: Config, callbackQueryId: string, text?: string) {
+  return telegramCall<boolean>(config, "answerCallbackQuery", JSON.stringify({
+    callback_query_id: callbackQueryId,
+    text
   }), { "content-type": "application/json" });
 }
 
@@ -104,11 +160,17 @@ export async function configureTelegramBot(config: Config, webhookUrl: string) {
   const webhook = await telegramCall<boolean>(config, "setWebhook", JSON.stringify({
     url: webhookUrl,
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
-    allowed_updates: ["message"],
+    allowed_updates: ["message", "callback_query"],
     drop_pending_updates: false
   }), { "content-type": "application/json" });
   const menu = await telegramCall<boolean>(config, "setChatMenuButton", JSON.stringify({
     menu_button: { type: "web_app", text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }
   }), { "content-type": "application/json" });
-  return webhook && menu;
+  const commands = await telegramCall<boolean>(config, "setMyCommands", JSON.stringify({ commands: [
+    { command: "start", description: "Open INDEX" },
+    { command: "collections", description: "Choose an active collection" },
+    { command: "newcollection", description: "Create and select a collection" },
+    { command: "nocollection", description: "Save to the main index" }
+  ] }), { "content-type": "application/json" });
+  return webhook && menu && commands;
 }

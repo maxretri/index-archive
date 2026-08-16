@@ -64,9 +64,15 @@ export async function upsertUser(services: Services, user: TelegramUser) {
     last_name: user.last_name ?? null,
     username: user.username ?? null,
     language_code: user.language_code ?? null
-  }, { onConflict: "telegram_user_id" }).select("id, telegram_user_id, first_name, username").single();
+  }, { onConflict: "telegram_user_id" }).select("id, telegram_user_id, first_name, username, active_collection_id").single();
   if (error) throw error;
-  return data as { id: string; telegram_user_id: number; first_name: string; username: string | null };
+  return data as {
+    id: string;
+    telegram_user_id: number;
+    first_name: string;
+    username: string | null;
+    active_collection_id: string | null;
+  };
 }
 
 export async function ingestMessage(services: Services, message: TelegramMessage, replyToUser = true) {
@@ -96,6 +102,25 @@ export async function ingestMessage(services: Services, message: TelegramMessage
   }, { onConflict: "telegram_chat_id,telegram_message_id", ignoreDuplicates: true }).select("id").maybeSingle();
   if (error) throw error;
 
-  if (data && replyToUser) await sendSavedReply(services.config, message.chat.id, message.message_id);
-  return data as { id: string } | null;
+  let collectionName: string | null = null;
+  if (data && user.active_collection_id) {
+    const { data: collection, error: collectionError } = await services.db.from("collections")
+      .select("id,name")
+      .eq("user_id", user.id)
+      .eq("id", user.active_collection_id)
+      .maybeSingle();
+    if (collectionError) throw collectionError;
+    if (collection) {
+      const { error: membershipError } = await services.db.from("collection_files").upsert({
+        collection_id: collection.id,
+        file_id: data.id,
+        user_id: user.id
+      }, { onConflict: "collection_id,file_id", ignoreDuplicates: true });
+      if (membershipError) throw membershipError;
+      collectionName = collection.name as string;
+    }
+  }
+
+  if (data && replyToUser) await sendSavedReply(services.config, message.chat.id, message.message_id, collectionName);
+  return data ? { id: data.id as string, collectionName } : null;
 }

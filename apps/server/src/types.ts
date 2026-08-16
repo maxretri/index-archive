@@ -43,7 +43,14 @@ export interface TelegramMessage {
   audio?: TelegramFile;
 }
 
-export interface TelegramUpdate { update_id: number; message?: TelegramMessage }
+export interface TelegramCallbackQuery {
+  id: string;
+  from: TelegramUser;
+  message?: Pick<TelegramMessage, "message_id" | "chat">;
+  data?: string;
+}
+
+export interface TelegramUpdate { update_id: number; message?: TelegramMessage; callback_query?: TelegramCallbackQuery }
 
 export interface SessionUser {
   id: string;

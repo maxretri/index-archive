@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { Services, TelegramUpdate } from "../types.js";
 import { ingestMessage } from "../telegram/ingest.js";
 import { sendMediaGroupSavedReply, sendWelcomeReply } from "../telegram/api.js";
+import { handleCollectionCallback, handleCollectionCommand } from "../telegram/collection-commands.js";
 import { MediaGroupReplyBatcher } from "../telegram/media-group-batcher.js";
 
 function safeEqual(left: string, right: string) {
@@ -17,7 +18,7 @@ export function isStartCommand(text: string | undefined) {
 
 export async function webhookRoutes(app: FastifyInstance, services: Services) {
   const mediaGroups = new MediaGroupReplyBatcher(
-    (chatId, messageId, count) => sendMediaGroupSavedReply(services.config, chatId, messageId, count),
+    (chatId, messageId, count, collectionName) => sendMediaGroupSavedReply(services.config, chatId, messageId, count, collectionName),
     (error) => app.log.error({ err: error }, "Failed to send media group summary")
   );
   app.addHook("onClose", async () => mediaGroups.close());
@@ -28,16 +29,20 @@ export async function webhookRoutes(app: FastifyInstance, services: Services) {
       return reply.code(401).send({ ok: false });
     }
     const update = request.body as TelegramUpdate;
+    if (update?.callback_query) await handleCollectionCallback(services, update.callback_query);
     if (update?.message) {
       if (isStartCommand(update.message.text)) {
         await sendWelcomeReply(services.config, update.message.chat.id);
+      } else if (await handleCollectionCommand(services, update.message)) {
+        // Collection commands are complete bot interactions and are not ingested.
       } else if (update.message.media_group_id) {
         const indexed = await ingestMessage(services, update.message, false);
         if (indexed) {
           mediaGroups.add(
             `${update.message.chat.id}:${update.message.media_group_id}`,
             update.message.chat.id,
-            update.message.message_id
+            update.message.message_id,
+            indexed.collectionName
           );
         }
       } else {

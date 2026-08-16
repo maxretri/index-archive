@@ -18,7 +18,18 @@ describe("Telegram media group reply batching", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith(42, 100, 3);
+    expect(send).toHaveBeenCalledWith(42, 100, 3, null);
+    batcher.close();
+  });
+
+  it("keeps the active collection in the group summary", async () => {
+    vi.useFakeTimers();
+    const send = vi.fn().mockResolvedValue(undefined);
+    const batcher = new MediaGroupReplyBatcher(send, vi.fn(), 100);
+    batcher.add("42:album", 42, 1, "TRAVEL");
+    batcher.add("42:album", 42, 2, "TRAVEL");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(send).toHaveBeenCalledWith(42, 1, 2, "TRAVEL");
     batcher.close();
   });
 
