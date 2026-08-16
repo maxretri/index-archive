@@ -43,6 +43,37 @@ export async function collectionRoutes(app: FastifyInstance, services: Services,
     return reply.code(201).send({ id: data.id, name: data.name, createdAt: data.created_at, itemCount: 0, coverFileId: null });
   });
 
+  app.post("/api/collections/files", { preHandler: authenticate }, async (request, reply) => {
+    const body = z.object({
+      fileIds: z.array(z.string().uuid()).min(1).max(200),
+      collectionIds: z.array(z.string().uuid()).min(1).max(20)
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Select files and collections" });
+
+    const userId = request.sessionUser!.id;
+    const fileIds = [...new Set(body.data.fileIds)];
+    const collectionIds = [...new Set(body.data.collectionIds)];
+    const [{ data: files, error: fileError }, { data: collections, error: collectionError }] = await Promise.all([
+      services.db.from("files").select("id").eq("user_id", userId).in("id", fileIds),
+      services.db.from("collections").select("id").eq("user_id", userId).in("id", collectionIds)
+    ]);
+    if (fileError) throw fileError;
+    if (collectionError) throw collectionError;
+    if ((files?.length ?? 0) !== fileIds.length || (collections?.length ?? 0) !== collectionIds.length) {
+      return reply.code(400).send({ error: "Unknown file or collection" });
+    }
+
+    const memberships = collectionIds.flatMap((collectionId) => fileIds.map((fileId) => ({
+      collection_id: collectionId,
+      file_id: fileId,
+      user_id: userId
+    })));
+    const { error } = await services.db.from("collection_files")
+      .upsert(memberships, { onConflict: "collection_id,file_id", ignoreDuplicates: true });
+    if (error) throw error;
+    return reply.send({ fileCount: fileIds.length, collectionIds });
+  });
+
   app.delete("/api/collections/:id", { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "Invalid collection" });

@@ -36,6 +36,10 @@ export const api = {
   collections: () => request<Collection[]>("/api/collections"),
   createCollection: (name: string) => request<Collection>("/api/collections", { method: "POST", body: JSON.stringify({ name }) }),
   deleteCollection: (id: string) => request<void>(`/api/collections/${id}`, { method: "DELETE" }),
+  addFilesToCollections: (fileIds: string[], collectionIds: string[]) => request<{ fileCount: number; collectionIds: string[] }>("/api/collections/files", {
+    method: "POST",
+    body: JSON.stringify({ fileIds, collectionIds })
+  }),
   favorite: (id: string, favorite: boolean) => request<{ id: string; isFavorite: boolean }>(`/api/files/${id}/favorite`, { method: "PATCH", body: JSON.stringify({ favorite }) }),
   prepareShare: (id: string) => request<{ messageId: string; expiresAt: number }>(`/api/files/${id}/share`, { method: "POST" }),
   setCollections: (id: string, collectionIds: string[]) => request<{ collectionIds: string[] }>(`/api/files/${id}/collections`, { method: "PUT", body: JSON.stringify({ collectionIds }) }),

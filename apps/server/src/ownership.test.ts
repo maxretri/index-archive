@@ -77,6 +77,41 @@ describe("ownership boundary", () => {
     await app.close();
   });
 
+  it("rejects bulk collection changes when any selected file is not owned by the session user", async () => {
+    const userId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
+    const collectionId = "da3ad9ee-05dc-4844-8941-6b764e431406";
+    const fileId = "ca02001b-8f4f-4dfc-b3ff-105bc67615f1";
+    const filters: Array<[string, string, unknown]> = [];
+    const database = {
+      from(table: string) {
+        if (table === "collection_files") throw new Error("must not write memberships");
+        const data = table === "collections" ? [{ id: collectionId }] : [];
+        const chain = {
+          select() { return this; },
+          eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          in() { return this; },
+          then(onfulfilled: (value: { data: Array<{ id: string }>; error: null }) => unknown) {
+            return Promise.resolve({ data, error: null }).then(onfulfilled);
+          }
+        };
+        return chain;
+      }
+    };
+    const app = await buildApp(config, database as never);
+    const token = await createSession({ id: userId, telegramUserId: "100200300" }, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/collections/files",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fileIds: [fileId], collectionIds: [collectionId] }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(filters).toContainEqual(["files", "user_id", userId]);
+    expect(filters).toContainEqual(["collections", "user_id", userId]);
+    await app.close();
+  });
+
   it("rejects webhook requests without Telegram's configured secret", async () => {
     const db = { from: () => { throw new Error("must not query"); } };
     const app = await buildApp(config, db as never);

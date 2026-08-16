@@ -13,4 +13,27 @@ describe("Telegram media normalization", () => {
     });
     expect(media).toMatchObject({ telegramFileId: "original", thumbnailFileId: "medium", width: 1440, height: 1920, fileType: "photo" });
   });
+
+  it("indexes a Telegram PDF as a document without copying its binary", () => {
+    const media = normalizeMedia({
+      message_id: 5,
+      date: 1_800_000_000,
+      chat: { id: 8, type: "private" },
+      document: {
+        file_id: "telegram-pdf-file-id",
+        file_unique_id: "pdf-unique-id",
+        file_name: "China visa.pdf",
+        mime_type: "application/pdf",
+        file_size: 84_221
+      }
+    });
+
+    expect(media).toMatchObject({
+      telegramFileId: "telegram-pdf-file-id",
+      fileType: "document",
+      mimeType: "application/pdf",
+      filename: "China visa.pdf",
+      fileSize: 84_221
+    });
+  });
 });
