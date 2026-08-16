@@ -25,6 +25,27 @@ export async function sendSavedReply(config: Config, chatId: number, messageId: 
   }), { "content-type": "application/json" });
 }
 
+export async function sendWelcomeReply(config: Config, chatId: number) {
+  const text = [
+    "INDEX",
+    "",
+    "EN",
+    "Forward or send photos, videos, documents, and audio here. They’ll appear in your private archive.",
+    "",
+    "RU",
+    "Отправляйте или пересылайте сюда фото, видео, документы и аудио. Они появятся в вашем личном архиве.",
+    "",
+    "We only index files you explicitly send. We never read your chats.",
+    "Мы индексируем только то, что вы отправляете. Мы не читаем ваши чаты."
+  ].join("\n");
+
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text,
+    reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]] }
+  }), { "content-type": "application/json" });
+}
+
 export async function sendUploadToTelegram(
   config: Config,
   chatId: number,

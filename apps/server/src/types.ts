@@ -34,6 +34,7 @@ export interface TelegramMessage {
   date: number;
   chat: { id: number; type: string };
   from?: TelegramUser;
+  text?: string;
   caption?: string;
   photo?: TelegramPhotoSize[];
   video?: TelegramFile;
