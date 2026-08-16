@@ -3,18 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ArchiveFile } from "@index/shared";
 import { formatBytes, formatDuration } from "@index/shared";
 import { api } from "../api";
-import { PrivateImage, PrivateVideo, SharedImage, SharedVideo } from "./PrivateMedia";
-import { useSharedObjectUrl } from "../hooks";
+import { PrivateImage, PrivateVideo, ReceivedImage, ReceivedVideo, SharedImage, SharedVideo } from "./PrivateMedia";
+import { useReceivedObjectUrl, useSharedObjectUrl } from "../hooks";
 
-interface Props { initialId: string; files: ArchiveFile[]; sharedToken?: string; onClose(): void }
+interface Props { initialId: string; files: ArchiveFile[]; sharedToken?: string; sharedGrantId?: string; onClose(): void }
 
-export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
+export function Viewer({ initialId, files, sharedToken, sharedGrantId, onClose }: Props) {
   const initialIndex = Math.max(0, files.findIndex((file) => file.id === initialId));
   const [index, setIndex] = useState(initialIndex);
   const file = files[index]!;
   const queryClient = useQueryClient();
   const touchX = useRef<number | null>(null);
-  const collections = useQuery({ queryKey: ["collections"], queryFn: api.collections, enabled: !sharedToken });
+  const readOnly = Boolean(sharedToken || sharedGrantId);
+  const collections = useQuery({ queryKey: ["collections"], queryFn: api.collections, enabled: !readOnly });
   const [panel, setPanel] = useState<"none" | "collections" | "tags">("none");
   const [tagText, setTagText] = useState(file.tags.join(", "));
   const [isFavorite, setIsFavorite] = useState(file.isFavorite);
@@ -102,7 +103,9 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
   const download = async () => {
     const blob = sharedToken
       ? await api.sharedContent(file.id, sharedToken, "original", true)
-      : await api.content(file.id, "original", true);
+      : sharedGrantId
+        ? await api.receivedContent(sharedGrantId, file.id, "original", true)
+        : await api.content(file.id, "original", true);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -128,7 +131,7 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
 
       <div className="viewer-stage">
         <button className="viewer-nav previous" disabled={index === 0} onClick={() => navigate(-1)} aria-label="Previous">‹</button>
-        <FilePreview file={file} sharedToken={sharedToken} />
+        <FilePreview file={file} sharedToken={sharedToken} sharedGrantId={sharedGrantId} />
         <button className="viewer-nav next" disabled={index === files.length - 1} onClick={() => navigate(1)} aria-label="Next">›</button>
       </div>
 
@@ -137,16 +140,16 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
           <strong>{file.filename ?? file.type.toUpperCase()}</strong>
           <span>{new Date(file.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "long", year: "numeric" })}{file.fileSize ? ` · ${formatBytes(file.fileSize)}` : ""}{file.duration ? ` · ${formatDuration(file.duration)}` : ""}</span>
         </div>
-        {!sharedToken && <div className="viewer-actions">
+        {!readOnly && <div className="viewer-actions">
           {file.type === "photo" && <button disabled={share.isPending} onClick={() => share.mutate()}>{share.isPending ? "PREPARING" : "FORWARD"}</button>}
           <button className="delete-action" onClick={() => { setPanel("none"); setConfirmDelete(true); }}>DELETE</button>
           <button className={isFavorite ? "active" : ""} disabled={favorite.isPending} onClick={() => favorite.mutate()}>{isFavorite ? "FAVORITED" : "FAVORITE"}</button>
           <button className={panel === "collections" ? "active" : ""} onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
           <button onClick={() => setPanel(panel === "tags" ? "none" : "tags")}>TAGS</button>
         </div>}
-        {sharedToken && <div className="shared-readonly">SHARED COLLECTION · READ ONLY</div>}
+        {readOnly && <div className="shared-readonly">SHARED COLLECTION · READ ONLY</div>}
         {shareError && <div className="viewer-action-error">{shareError}</div>}
-        {confirmDelete && !sharedToken && <div className="viewer-delete-confirm" role="alertdialog" aria-label="Delete file">
+        {confirmDelete && !readOnly && <div className="viewer-delete-confirm" role="alertdialog" aria-label="Delete file">
           <p>REMOVE THIS FILE FROM INDEX? TELEGRAM WILL ALSO REMOVE THE CHAT MESSAGE WHEN ALLOWED.</p>
           {deleteFile.error && <span>{deleteFile.error.message}</span>}
           <div><button onClick={() => setConfirmDelete(false)}>CANCEL</button><button disabled={deleteFile.isPending} onClick={() => deleteFile.mutate()}>{deleteFile.isPending ? "DELETING" : "CONFIRM DELETE"}</button></div>
@@ -185,14 +188,35 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
   );
 }
 
-function FilePreview({ file, sharedToken }: { file: ArchiveFile; sharedToken?: string }) {
+function FilePreview({ file, sharedToken, sharedGrantId }: { file: ArchiveFile; sharedToken?: string; sharedGrantId?: string }) {
   if (file.type === "photo") return sharedToken
     ? <SharedImage fileId={file.id} shareToken={sharedToken} variant="original" alt={file.filename ?? "Shared photo"} />
-    : <PrivateImage fileId={file.id} variant="original" alt={file.filename ?? "Archived photo"} />;
-  if (file.type === "video") return sharedToken ? <SharedVideo fileId={file.id} shareToken={sharedToken} /> : <PrivateVideo fileId={file.id} />;
-  if (file.mimeType === "application/pdf") return sharedToken ? <SharedPdfPreview fileId={file.id} shareToken={sharedToken} /> : <PdfPreview fileId={file.id} />;
+    : sharedGrantId
+      ? <ReceivedImage fileId={file.id} grantId={sharedGrantId} variant="original" alt={file.filename ?? "Shared photo"} />
+      : <PrivateImage fileId={file.id} variant="original" alt={file.filename ?? "Archived photo"} />;
+  if (file.type === "video") return sharedToken
+    ? <SharedVideo fileId={file.id} shareToken={sharedToken} />
+    : sharedGrantId ? <ReceivedVideo fileId={file.id} grantId={sharedGrantId} /> : <PrivateVideo fileId={file.id} />;
+  if (file.mimeType === "application/pdf") return sharedToken
+    ? <SharedPdfPreview fileId={file.id} shareToken={sharedToken} />
+    : sharedGrantId ? <ReceivedPdfPreview fileId={file.id} grantId={sharedGrantId} /> : <PdfPreview fileId={file.id} />;
   if (file.type === "audio" && sharedToken) return <SharedAudio fileId={file.id} shareToken={sharedToken} />;
+  if (file.type === "audio" && sharedGrantId) return <ReceivedAudio fileId={file.id} grantId={sharedGrantId} />;
   return <div className="document-preview"><b>{file.filename?.split(".").at(-1)?.toUpperCase() ?? file.type.toUpperCase()}</b><span>{file.filename ?? "UNTITLED FILE"}</span><small>SELECT DOWNLOAD TO OPEN THE ORIGINAL</small></div>;
+}
+
+function ReceivedPdfPreview({ fileId, grantId }: { fileId: string; grantId: string }) {
+  const { url, isLoading, isError } = useReceivedObjectUrl(grantId, fileId, "original");
+  if (isError) return <div className="viewer-loading">PDF UNAVAILABLE</div>;
+  if (isLoading || !url) return <div className="viewer-loading">OPENING PDF</div>;
+  return <iframe className="pdf-preview" src={`${url}#view=FitH`} title="Shared PDF preview" />;
+}
+
+function ReceivedAudio({ fileId, grantId }: { fileId: string; grantId: string }) {
+  const { url, isLoading, isError } = useReceivedObjectUrl(grantId, fileId, "original");
+  if (isError) return <div className="viewer-loading">AUDIO UNAVAILABLE</div>;
+  if (isLoading || !url) return <div className="viewer-loading">LOADING AUDIO</div>;
+  return <audio className="audio-preview" src={url} controls autoPlay />;
 }
 
 function SharedPdfPreview({ fileId, shareToken }: { fileId: string; shareToken: string }) {

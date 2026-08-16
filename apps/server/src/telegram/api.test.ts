@@ -95,7 +95,7 @@ describe("prepared Telegram collection sharing", () => {
       chat_id: 99112233,
       reply_markup: { inline_keyboard: [[{
         text: "OPEN COLLECTION",
-        web_app: { url: `https://index.example.com?share=${token}` }
+        web_app: { url: `https://index.example.com?share=collection_${token}` }
       }]] }
     });
   });

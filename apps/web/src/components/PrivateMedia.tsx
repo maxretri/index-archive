@@ -1,5 +1,5 @@
 import type { ImgHTMLAttributes } from "react";
-import { useObjectUrl, useSharedObjectUrl } from "../hooks";
+import { useObjectUrl, useReceivedObjectUrl, useSharedObjectUrl } from "../hooks";
 
 interface Props extends Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> {
   fileId: string;
@@ -27,6 +27,19 @@ export function SharedImage({ fileId, shareToken, variant = "thumbnail", alt = "
 
 export function SharedVideo({ fileId, shareToken }: { fileId: string; shareToken: string }) {
   const { url, isLoading, isError } = useSharedObjectUrl(fileId, shareToken, "original");
+  if (isError) return <div className="media-error">VIDEO UNAVAILABLE</div>;
+  if (isLoading || !url) return <div className="viewer-loading">LOADING VIDEO</div>;
+  return <video src={url} controls playsInline autoPlay />;
+}
+
+export function ReceivedImage({ fileId, grantId, variant = "thumbnail", alt = "", ...props }: Props & { grantId: string }) {
+  const { url, isError } = useReceivedObjectUrl(grantId, fileId, variant);
+  if (isError) return <div className="media-error">UNAVAILABLE</div>;
+  return url ? <img src={url} alt={alt} {...props} /> : <div className="media-skeleton" aria-hidden="true" />;
+}
+
+export function ReceivedVideo({ fileId, grantId }: { fileId: string; grantId: string }) {
+  const { url, isLoading, isError } = useReceivedObjectUrl(grantId, fileId, "original");
   if (isError) return <div className="media-error">VIDEO UNAVAILABLE</div>;
   if (isLoading || !url) return <div className="viewer-loading">LOADING VIDEO</div>;
   return <video src={url} controls playsInline autoPlay />;

@@ -38,6 +38,24 @@ export function useSharedObjectUrl(id: string, shareToken: string, variant: "thu
   return { ...query, url };
 }
 
+export function useReceivedObjectUrl(grantId: string, id: string, variant: "thumbnail" | "original", enabled = true) {
+  const query = useQuery({
+    queryKey: ["received-content", grantId, id, variant],
+    queryFn: () => api.receivedContent(grantId, id, variant),
+    enabled,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 10 * 60 * 1000
+  });
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    if (!query.data) return;
+    const next = URL.createObjectURL(query.data);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [query.data]);
+  return { ...query, url };
+}
+
 export function useIntersection(onIntersect: () => void, active = true) {
   const [node, setNode] = useState<Element | null>(null);
   useEffect(() => {

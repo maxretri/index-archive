@@ -1,4 +1,4 @@
-import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles, SharedCollectionPage, SubscriptionStatus } from "@index/shared";
+import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles, ReceivedCollection, SharedCollectionPage, SubscriptionStatus } from "@index/shared";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const sessionKey = "index.session";
@@ -69,6 +69,20 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ token, cursor, limit: 30 })
   }),
+  receivedCollections: () => request<ReceivedCollection[]>("/api/shared-collections/received"),
+  receivedCollection: (grantId: string, cursor?: string) => {
+    const query = new URLSearchParams({ limit: "30" });
+    if (cursor) query.set("cursor", cursor);
+    return request<SharedCollectionPage>(`/api/shared-collections/received/${grantId}?${query}`);
+  },
+  receivedContent: async (grantId: string, id: string, variant: "thumbnail" | "original" = "original", download = false) => {
+    const token = getSession();
+    const response = await fetch(`${API_URL}/api/shared-collections/received/${grantId}/files/${id}/content?variant=${variant}&download=${download}`, {
+      headers: token ? { authorization: `Bearer ${token}` } : {}
+    });
+    if (!response.ok) throw new Error("Shared file unavailable");
+    return response.blob();
+  },
   sharedContent: async (id: string, shareToken: string, variant: "thumbnail" | "original" = "original", download = false) => {
     const token = getSession();
     const response = await fetch(`${API_URL}/api/shared-collections/files/${id}/content?variant=${variant}&download=${download}`, {

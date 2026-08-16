@@ -33,6 +33,15 @@ export interface SharedCollectionPage {
   nextCursor: string | null;
 }
 
+export interface ReceivedCollection {
+  id: string;
+  name: string;
+  ownerName: string;
+  acceptedAt: string;
+  itemCount: number;
+  coverFileId: string | null;
+}
+
 export interface PaginatedFiles {
   items: ArchiveFile[];
   nextCursor: string | null;

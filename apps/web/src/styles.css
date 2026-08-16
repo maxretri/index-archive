@@ -107,11 +107,14 @@ button:disabled { cursor: default; opacity: .42; }
 .bulk-confirm.destructive { background: #9f2922; }
 .bulk-delete-copy { margin: 22px 0 4px; color: var(--grey); font-size: .58rem; line-height: 1.7; letter-spacing: .07em; }
 
-.mobile-nav { position: fixed; z-index: 30; right: 0; bottom: 0; left: 0; height: calc(56px + var(--safe-bottom)); padding: 0 16px var(--safe-bottom); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; background: color-mix(in srgb, var(--paper) 95%, transparent); border-top: 1px solid var(--ink); backdrop-filter: blur(10px); }
-.mobile-nav button { height: 100%; color: var(--grey); font-size: .58rem; letter-spacing: .1em; }
+.mobile-nav { position: fixed; z-index: 30; right: 0; bottom: 0; left: 0; height: calc(56px + var(--safe-bottom)); padding: 0 10px var(--safe-bottom); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; background: color-mix(in srgb, var(--paper) 95%, transparent); border-top: 1px solid var(--ink); backdrop-filter: blur(10px); }
+.mobile-nav button { height: 100%; color: var(--grey); font-size: .52rem; letter-spacing: .07em; }
 .mobile-nav button:first-child { text-align: left; }
 .mobile-nav button:last-child { text-align: right; }
 .mobile-nav .active { color: var(--ink); font-weight: 600; }
+
+.received-collection-status { padding: 10px 1px 0; color: var(--grey); font-size: .49rem; letter-spacing: .1em; }
+.shared-back { margin-top: 16px; padding: 0 0 3px; border-bottom: 1px solid var(--ink); font-size: .54rem; letter-spacing: .1em; }
 
 .search-form { padding: 23px 0; border-bottom: 1px solid var(--line); }
 .search-line { display: flex; align-items: flex-end; border-bottom: 1px solid var(--ink); }

@@ -10,8 +10,9 @@ import { CollectionShareControls } from "./components/CollectionShareControls";
 import { SharedCollection } from "./components/SharedCollection";
 import { Membership } from "./components/Membership";
 import { SponsorSlot } from "./components/SponsorSlot";
+import { ReceivedCollections } from "./components/ReceivedCollections";
 
-type Screen = "library" | "search" | "collections" | "membership";
+type Screen = "library" | "search" | "collections" | "shared" | "membership";
 
 export function App() {
   const sharedToken = collectionShareToken();
@@ -19,14 +20,21 @@ export function App() {
 }
 
 function IndexApp() {
-  const [screen, setScreen] = useState<Screen>(new URLSearchParams(window.location.search).get("screen") === "plus" ? "membership" : "library");
+  const initialGrantId = receivedGrantId();
+  const [screen, setScreen] = useState<Screen>(initialGrantId ? "shared" : new URLSearchParams(window.location.search).get("screen") === "plus" ? "membership" : "library");
   const [filter, setFilter] = useState<LibraryFilter>("all");
   const [collection, setCollection] = useState<Collection>();
   const [viewer, setViewer] = useState<{ id: string; files: ArchiveFile[] }>();
   const [search, setSearch] = useState({ draft: "", query: "", from: "", to: "" });
 
   const openLibrary = (next: LibraryFilter) => {
+    clearReceivedGrant();
     setScreen("library"); setFilter(next); setCollection(undefined);
+  };
+  const openScreen = (next: Exclude<Screen, "library">) => {
+    if (next !== "shared") clearReceivedGrant();
+    setScreen(next);
+    setCollection(undefined);
   };
   const openFile = (file: ArchiveFile, files: ArchiveFile[]) => setViewer({ id: file.id, files });
 
@@ -46,9 +54,10 @@ function IndexApp() {
           <NavButton label="AUDIO" active={screen === "library" && filter === "audio"} onClick={() => openLibrary("audio")} />
           <NavButton label="FAVORITES" active={screen === "library" && filter === "favorites"} onClick={() => openLibrary("favorites")} />
           <div className="nav-break" />
-          <NavButton label="SEARCH" active={screen === "search"} onClick={() => { setScreen("search"); setCollection(undefined); }} />
-          <NavButton label="COLLECTIONS" active={screen === "collections"} onClick={() => { setScreen("collections"); setCollection(undefined); }} />
-          <NavButton label="PLUS" active={screen === "membership"} onClick={() => { setScreen("membership"); setCollection(undefined); }} />
+          <NavButton label="SEARCH" active={screen === "search"} onClick={() => openScreen("search")} />
+          <NavButton label="COLLECTIONS" active={screen === "collections"} onClick={() => openScreen("collections")} />
+          <NavButton label="SHARED" active={screen === "shared"} onClick={() => openScreen("shared")} />
+          <NavButton label="PLUS" active={screen === "membership"} onClick={() => openScreen("membership")} />
         </aside>
 
         <main className="main-content">
@@ -67,17 +76,19 @@ function IndexApp() {
             {search.query ? <Library filter="all" q={search.query} from={toIso(search.from, false)} to={toIso(search.to, true)} onOpen={openFile} /> : <div className="search-prompt"><p>FIND WHAT YOU SENT.</p><span>SEARCH FILENAME, FILE TYPE, CAPTION, DATE OR TAG.</span></div>}
           </>}
           {screen === "collections" && <><PageHeading title="COLLECTIONS" meta="VIRTUAL GROUPS" /><Collections onOpen={(selected) => { setCollection(selected); setFilter("all"); setScreen("library"); }} /></>}
+          {screen === "shared" && <ReceivedCollections initialGrantId={initialGrantId} />}
           {screen === "membership" && <><PageHeading title="PLUS" meta="INDEX MEMBERSHIP" /><Membership /></>}
-          {screen !== "membership" && <SponsorSlot onOpenPlus={() => { setCollection(undefined); setScreen("membership"); }} />}
+          {screen !== "membership" && <SponsorSlot onOpenPlus={() => openScreen("membership")} />}
           <footer className="privacy-note">INDEX ONLY KNOWS WHAT YOU EXPLICITLY SEND, FORWARD OR UPLOAD. IT DOES NOT READ YOUR CHATS OR SAVED MESSAGES.</footer>
         </main>
       </div>
 
       <nav className="mobile-nav" aria-label="Primary navigation">
         <button className={screen === "library" ? "active" : ""} onClick={() => openLibrary("all")}>INDEX</button>
-        <button className={screen === "search" ? "active" : ""} onClick={() => setScreen("search")}>SEARCH</button>
-        <button className={screen === "collections" ? "active" : ""} onClick={() => setScreen("collections")}>COLLECTIONS</button>
-        <button className={screen === "membership" ? "active" : ""} onClick={() => setScreen("membership")}>PLUS</button>
+        <button className={screen === "search" ? "active" : ""} onClick={() => openScreen("search")}>SEARCH</button>
+        <button className={screen === "collections" ? "active" : ""} onClick={() => openScreen("collections")}>COLLECTIONS</button>
+        <button className={screen === "shared" ? "active" : ""} onClick={() => openScreen("shared")}>SHARED</button>
+        <button className={screen === "membership" ? "active" : ""} onClick={() => openScreen("membership")}>PLUS</button>
       </nav>
       {viewer && <Viewer initialId={viewer.id} files={viewer.files} onClose={() => setViewer(undefined)} />}
     </div>
@@ -147,6 +158,18 @@ function collectionShareToken() {
   const startParam = window.Telegram?.WebApp.initDataUnsafe?.start_param
     ?? new URLSearchParams(window.location.search).get("tgWebAppStartParam")
     ?? new URLSearchParams(window.location.search).get("share");
-  const match = startParam?.match(/^collection_([A-Za-z0-9_-]{43})$/);
+  const match = startParam?.match(/^(?:collection_)?([A-Za-z0-9_-]{43})$/);
   return match?.[1];
+}
+
+function receivedGrantId() {
+  const value = new URLSearchParams(window.location.search).get("shared");
+  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
+}
+
+function clearReceivedGrant() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("shared")) return;
+  url.searchParams.delete("shared");
+  window.history.replaceState({}, "", url);
 }

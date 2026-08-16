@@ -18,10 +18,14 @@ describe("shared collection bot deep links", () => {
     expect(sharedCollectionTokenFromStart(`/start other_${token}`)).toBeNull();
   });
 
-  it("copies the collection files into the recipient chat and replies with the exact collection opener", async () => {
+  it("accepts the share, copies sorted files, and opens the recipient's persistent Shared library", async () => {
     const filters: Array<[string, string, unknown]> = [];
     const ownerId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
+    const recipientId = "76677226-2cb0-453e-99a4-0db75e4a8751";
     const collectionId = "da3ad9ee-05dc-4844-8941-6b764e431406";
+    const shareId = "7a3d59ad-cd18-47cc-9b84-fd754bb0caf4";
+    const grantId = "8c0610d7-895d-4db8-a9c6-e8a079caef50";
+    const upserts: Array<[string, unknown]> = [];
     const database = {
       from(table: string) {
         let selection = "";
@@ -30,6 +34,7 @@ describe("shared collection bot deep links", () => {
             selection = options?.head ? "count" : columns.includes("files!inner") ? "memberships" : "single";
             return this;
           },
+          upsert(value: unknown) { upserts.push([table, value]); return this; },
           eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
           is(column: string, value: unknown) { filters.push([table, column, value]); return this; },
           order() { return this; },
@@ -38,6 +43,9 @@ describe("shared collection bot deep links", () => {
             return Promise.resolve({
               data: [{
                 created_at: "2026-08-16T10:00:00.000Z",
+                files: { telegram_chat_id: 112233, telegram_message_id: 92 }
+              }, {
+                created_at: "2026-08-16T10:01:00.000Z",
                 files: { telegram_chat_id: 112233, telegram_message_id: 91 }
               }],
               error: null
@@ -46,8 +54,16 @@ describe("shared collection bot deep links", () => {
           maybeSingle() {
             return Promise.resolve({
               data: table === "collection_shares"
-                ? { user_id: ownerId, collection_id: collectionId }
+                ? { id: shareId, user_id: ownerId, collection_id: collectionId }
                 : { id: collectionId, name: "TRAVEL" },
+              error: null
+            });
+          },
+          single() {
+            return Promise.resolve({
+              data: table === "users"
+                ? { id: recipientId, telegram_user_id: 445566, first_name: "Nora", username: null, active_collection_id: null }
+                : { id: grantId },
               error: null
             });
           },
@@ -62,7 +78,7 @@ describe("shared collection bot deep links", () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
-        result: [{ message_id: 12 }]
+        result: [{ message_id: 12 }, { message_id: 13 }]
       }), { status: 200, headers: { "content-type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
@@ -87,16 +103,24 @@ describe("shared collection bot deep links", () => {
 
     expect(handled).toBe(true);
     expect(filters).toContainEqual(["collection_shares", "token_hash", hashCollectionShareToken(token)]);
+    expect(upserts.some(([table]) => table === "users")).toBe(true);
+    expect(upserts).toContainEqual(["collection_share_recipients", expect.objectContaining({
+      share_id: shareId,
+      collection_id: collectionId,
+      owner_user_id: ownerId,
+      recipient_user_id: recipientId
+    })]);
     const [copyUrl, copyOptions] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(copyUrl).toContain("/copyMessages");
     expect(JSON.parse(String(copyOptions.body))).toEqual({
       chat_id: 445566,
       from_chat_id: 112233,
-      message_ids: [91]
+      message_ids: [91, 92]
     });
     const [, openOptions] = fetchMock.mock.calls[1] as [string, RequestInit];
     const openPayload = JSON.parse(String(openOptions.body)) as Record<string, any>;
-    expect(openPayload.text).toContain("1 FILE SENT TO THIS CHAT");
-    expect(openPayload.reply_markup.inline_keyboard[0][0].web_app.url).toBe(`https://index.example.com?share=${token}`);
+    expect(openPayload.text).toContain("2 FILES SENT TO THIS CHAT");
+    expect(openPayload.text).toContain("ADDED TO YOUR SHARED LIBRARY");
+    expect(openPayload.reply_markup.inline_keyboard[0][0].web_app.url).toBe(`https://index.example.com?shared=${grantId}`);
   });
 });

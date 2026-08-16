@@ -1,6 +1,7 @@
 import type { Services, TelegramMessage } from "../types.js";
 import { hashCollectionShareToken, isCollectionShareToken } from "../security/collection-share.js";
 import { copyTelegramMessages, sendSharedCollectionOpen, sendSharedCollectionUnavailable } from "./api.js";
+import { upsertUser } from "./ingest.js";
 
 const CHAT_DELIVERY_LIMIT = 100;
 
@@ -15,7 +16,7 @@ export async function handleSharedCollectionStart(services: Services, message: T
   if (!token || !message.from || message.from.is_bot || message.chat.type !== "private") return false;
 
   const { data: share, error: shareError } = await services.db.from("collection_shares")
-    .select("user_id,collection_id")
+    .select("id,user_id,collection_id")
     .eq("token_hash", hashCollectionShareToken(token))
     .is("revoked_at", null)
     .maybeSingle();
@@ -45,6 +46,20 @@ export async function handleSharedCollectionStart(services: Services, message: T
     return true;
   }
 
+  const recipient = await upsertUser(services, message.from);
+  let grantId: string | undefined;
+  if (recipient.id !== share.user_id) {
+    const { data: grant, error: grantError } = await services.db.from("collection_share_recipients").upsert({
+      share_id: share.id,
+      collection_id: share.collection_id,
+      owner_user_id: share.user_id,
+      recipient_user_id: recipient.id,
+      accepted_at: new Date().toISOString()
+    }, { onConflict: "collection_id,recipient_user_id" }).select("id").single();
+    if (grantError) throw grantError;
+    grantId = grant.id as string;
+  }
+
   const messagesByChat = new Map<number, number[]>();
   for (const membership of memberships ?? []) {
     const related = membership.files as unknown as
@@ -61,7 +76,8 @@ export async function handleSharedCollectionStart(services: Services, message: T
   let copiedCount = 0;
   for (const [sourceChatId, messageIds] of messagesByChat) {
     try {
-      const copied = await copyTelegramMessages(services.config, message.chat.id, sourceChatId, messageIds);
+      const sortedMessageIds = [...new Set(messageIds)].sort((left, right) => left - right);
+      const copied = await copyTelegramMessages(services.config, message.chat.id, sourceChatId, sortedMessageIds);
       copiedCount += copied.length;
     } catch {
       // The collection remains available in the Mini App if Telegram can no longer copy a source message.
@@ -73,7 +89,8 @@ export async function handleSharedCollectionStart(services: Services, message: T
     itemCount: countResult.count ?? 0
   }, token, {
     copiedCount,
-    truncated: (countResult.count ?? 0) > CHAT_DELIVERY_LIMIT
+    truncated: (countResult.count ?? 0) > CHAT_DELIVERY_LIMIT,
+    grantId
   });
   return true;
 }

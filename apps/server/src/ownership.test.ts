@@ -175,6 +175,111 @@ describe("ownership boundary", () => {
     await app.close();
   });
 
+  it("scopes the persistent Shared library to the signed-in recipient", async () => {
+    const recipientId = "76677226-2cb0-453e-99a4-0db75e4a8751";
+    const filters: Array<[string, string, unknown]> = [];
+    const query = {
+      select() { return this; },
+      eq(column: string, value: unknown) { filters.push(["collection_share_recipients", column, value]); return this; },
+      order() { return this; },
+      then(onfulfilled: (value: { data: unknown[]; error: null }) => unknown) {
+        return Promise.resolve({ data: [], error: null }).then(onfulfilled);
+      }
+    };
+    const app = await buildApp(config, { from: () => query } as never);
+    const session = await createSession({ id: recipientId, telegramUserId: "998877" }, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/shared-collections/received",
+      headers: { authorization: `Bearer ${session}` }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([]);
+    expect(filters).toContainEqual(["collection_share_recipients", "recipient_user_id", recipientId]);
+    await app.close();
+  });
+
+  it("rejects the Shared library without a signed Telegram session before querying", async () => {
+    let queried = false;
+    const app = await buildApp(config, { from: () => {
+      queried = true;
+      throw new Error("must not query");
+    } } as never);
+    const response = await app.inject({ method: "GET", url: "/api/shared-collections/received" });
+    expect(response.statusCode).toBe(401);
+    expect(queried).toBe(false);
+    await app.close();
+  });
+
+  it("does not open a persistent share accepted by a different recipient", async () => {
+    const recipientId = "76677226-2cb0-453e-99a4-0db75e4a8751";
+    const grantId = "8c0610d7-895d-4db8-a9c6-e8a079caef50";
+    const filters: Array<[string, string, unknown]> = [];
+    const query = {
+      select() { return this; },
+      eq(column: string, value: unknown) { filters.push(["collection_share_recipients", column, value]); return this; },
+      maybeSingle() { return Promise.resolve({ data: null, error: null }); }
+    };
+    const app = await buildApp(config, { from: () => query } as never);
+    const session = await createSession({ id: recipientId, telegramUserId: "998877" }, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/shared-collections/received/${grantId}`,
+      headers: { authorization: `Bearer ${session}` }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(filters).toContainEqual(["collection_share_recipients", "id", grantId]);
+    expect(filters).toContainEqual(["collection_share_recipients", "recipient_user_id", recipientId]);
+    await app.close();
+  });
+
+  it("stops persistent recipient access when the owner revokes sharing", async () => {
+    const ownerId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
+    const recipientId = "76677226-2cb0-453e-99a4-0db75e4a8751";
+    const collectionId = "da3ad9ee-05dc-4844-8941-6b764e431406";
+    const grantId = "8c0610d7-895d-4db8-a9c6-e8a079caef50";
+    const shareId = "7a3d59ad-cd18-47cc-9b84-fd754bb0caf4";
+    const filters: Array<[string, string, unknown]> = [];
+    const database = {
+      from(table: string) {
+        return {
+          select() { return this; },
+          eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          is(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          maybeSingle() {
+            return Promise.resolve({
+              data: table === "collection_share_recipients" ? {
+                id: grantId,
+                share_id: shareId,
+                collection_id: collectionId,
+                owner_user_id: ownerId,
+                recipient_user_id: recipientId,
+                accepted_at: "2026-08-16T10:00:00.000Z"
+              } : null,
+              error: null
+            });
+          }
+        };
+      }
+    };
+    const app = await buildApp(config, database as never);
+    const session = await createSession({ id: recipientId, telegramUserId: "998877" }, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/shared-collections/received/${grantId}`,
+      headers: { authorization: `Bearer ${session}` }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(filters).toContainEqual(["collection_shares", "id", shareId]);
+    expect(filters).toContainEqual(["collection_shares", "user_id", ownerId]);
+    expect(filters).toContainEqual(["collection_shares", "collection_id", collectionId]);
+    expect(filters).toContainEqual(["collection_shares", "revoked_at", null]);
+    await app.close();
+  });
+
   it("rejects webhook requests without Telegram's configured secret", async () => {
     const db = { from: () => { throw new Error("must not query"); } };
     const app = await buildApp(config, db as never);
