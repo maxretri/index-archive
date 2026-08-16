@@ -2,7 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Services, TelegramUpdate } from "../types.js";
 import { ingestMessage } from "../telegram/ingest.js";
-import { sendWelcomeReply } from "../telegram/api.js";
+import { sendMediaGroupSavedReply, sendWelcomeReply } from "../telegram/api.js";
+import { MediaGroupReplyBatcher } from "../telegram/media-group-batcher.js";
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
@@ -15,6 +16,12 @@ export function isStartCommand(text: string | undefined) {
 }
 
 export async function webhookRoutes(app: FastifyInstance, services: Services) {
+  const mediaGroups = new MediaGroupReplyBatcher(
+    (chatId, messageId, count) => sendMediaGroupSavedReply(services.config, chatId, messageId, count),
+    (error) => app.log.error({ err: error }, "Failed to send media group summary")
+  );
+  app.addHook("onClose", async () => mediaGroups.close());
+
   app.post("/telegram/webhook", async (request, reply) => {
     const secret = request.headers["x-telegram-bot-api-secret-token"];
     if (typeof secret !== "string" || !safeEqual(secret, services.config.TELEGRAM_WEBHOOK_SECRET)) {
@@ -24,6 +31,15 @@ export async function webhookRoutes(app: FastifyInstance, services: Services) {
     if (update?.message) {
       if (isStartCommand(update.message.text)) {
         await sendWelcomeReply(services.config, update.message.chat.id);
+      } else if (update.message.media_group_id) {
+        const indexed = await ingestMessage(services, update.message, false);
+        if (indexed) {
+          mediaGroups.add(
+            `${update.message.chat.id}:${update.message.media_group_id}`,
+            update.message.chat.id,
+            update.message.message_id
+          );
+        }
       } else {
         await ingestMessage(services, update.message, true);
       }

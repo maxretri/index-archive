@@ -31,6 +31,7 @@ export interface TelegramFile {
 
 export interface TelegramMessage {
   message_id: number;
+  media_group_id?: string;
   date: number;
   chat: { id: number; type: string };
   from?: TelegramUser;

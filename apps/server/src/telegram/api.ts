@@ -26,6 +26,15 @@ export async function sendSavedReply(config: Config, chatId: number, messageId: 
   }), { "content-type": "application/json" });
 }
 
+export async function sendMediaGroupSavedReply(config: Config, chatId: number, messageId: number, itemCount: number) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    reply_to_message_id: messageId,
+    text: `GROUP SAVED TO INDEX.\n${itemCount} ITEMS INDEXED.`,
+    reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX", web_app: { url: config.MINI_APP_URL } }]] }
+  }), { "content-type": "application/json" });
+}
+
 export async function sendWelcomeReply(config: Config, chatId: number) {
   const text = [
     "INDEX",
