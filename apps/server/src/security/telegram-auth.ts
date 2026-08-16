@@ -33,8 +33,11 @@ export function verifyTelegramInitData(
   }
 
   const entries = [...params.entries()]
-    .filter(([key]) => key !== "hash" && key !== "signature")
-    .sort(([a], [b]) => a.localeCompare(b));
+    // Bot-token validation signs every received field except `hash`.
+    // Newer Telegram clients also send `signature`; unlike third-party
+    // Ed25519 validation, it must remain in this HMAC data-check-string.
+    .filter(([key]) => key !== "hash")
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   const dataCheckString = entries.map(([key, value]) => `${key}=${value}`).join("\n");
   const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
   const expectedHash = createHmac("sha256", secretKey).update(dataCheckString).digest();
