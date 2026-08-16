@@ -53,7 +53,21 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
   });
   const setCollections = useMutation({
     mutationFn: (ids: string[]) => api.setCollections(file.id, ids),
-    onSuccess: async (result) => { setCollectionIds(result.collectionIds); await invalidate(); }
+    onMutate: (ids) => {
+      const previous = collectionIds;
+      setCollectionIds(ids);
+      window.Telegram?.WebApp.HapticFeedback?.impactOccurred("light");
+      return { previous };
+    },
+    onError: (_error, _ids, context) => {
+      setCollectionIds(context?.previous ?? file.collectionIds);
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("error");
+    },
+    onSuccess: async (result) => {
+      setCollectionIds(result.collectionIds);
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
+      await invalidate();
+    }
   });
   const setTags = useMutation({ mutationFn: () => api.setTags(file.id, tagText.split(",").map((tag) => tag.trim()).filter(Boolean)), onSuccess: invalidate });
   const share = useMutation({
@@ -127,7 +141,7 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
           {file.type === "photo" && <button disabled={share.isPending} onClick={() => share.mutate()}>{share.isPending ? "PREPARING" : "FORWARD"}</button>}
           <button className="delete-action" onClick={() => { setPanel("none"); setConfirmDelete(true); }}>DELETE</button>
           <button className={isFavorite ? "active" : ""} disabled={favorite.isPending} onClick={() => favorite.mutate()}>{isFavorite ? "FAVORITED" : "FAVORITE"}</button>
-          <button onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
+          <button className={panel === "collections" ? "active" : ""} onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
           <button onClick={() => setPanel(panel === "tags" ? "none" : "tags")}>TAGS</button>
         </div>}
         {sharedToken && <div className="shared-readonly">SHARED COLLECTION · READ ONLY</div>}
@@ -137,16 +151,29 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
           {deleteFile.error && <span>{deleteFile.error.message}</span>}
           <div><button onClick={() => setConfirmDelete(false)}>CANCEL</button><button disabled={deleteFile.isPending} onClick={() => deleteFile.mutate()}>{deleteFile.isPending ? "DELETING" : "CONFIRM DELETE"}</button></div>
         </div>}
-        {panel === "collections" && <div className="viewer-panel">
-          <span>ADD TO COLLECTION</span>
-          {collections.data?.map((collection) => {
-            const selected = collectionIds.includes(collection.id);
-            return <label key={collection.id}><input type="checkbox" checked={selected} onChange={() => {
-              const next = selected ? collectionIds.filter((id) => id !== collection.id) : [...collectionIds, collection.id];
-              setCollections.mutate(next);
-            }} />{collection.name}</label>;
-          })}
-          {!collections.data?.length && <small>CREATE A COLLECTION FIRST.</small>}
+        {panel === "collections" && <div className="viewer-panel collection-panel">
+          <div className="viewer-panel-heading"><span>CHOOSE COLLECTIONS</span><small aria-live="polite">{collectionIds.length} SELECTED</small></div>
+          <div className="viewer-collection-list">
+            {collections.data?.map((collection) => {
+              const selected = collectionIds.includes(collection.id);
+              return <button
+                type="button"
+                className={`viewer-collection-option${selected ? " selected" : ""}`}
+                aria-pressed={selected}
+                disabled={setCollections.isPending}
+                key={collection.id}
+                onClick={() => {
+                  const next = selected ? collectionIds.filter((id) => id !== collection.id) : [...collectionIds, collection.id];
+                  setCollections.mutate(next);
+                }}
+              >
+                <span><i aria-hidden="true">{selected ? "✓" : "+"}</i>{collection.name}</span>
+                <small>{selected ? "ADDED" : "ADD"}</small>
+              </button>;
+            })}
+          </div>
+          {setCollections.error && <p className="viewer-collection-error">COULD NOT UPDATE COLLECTION · TRY AGAIN</p>}
+          {!collections.isLoading && !collections.data?.length && <small className="viewer-collection-empty">CREATE A COLLECTION FIRST.</small>}
         </div>}
         {panel === "tags" && <form className="viewer-panel tag-form" onSubmit={(event) => { event.preventDefault(); setTags.mutate(); }}>
           <label htmlFor="viewer-tags">TAGS · COMMA SEPARATED</label>

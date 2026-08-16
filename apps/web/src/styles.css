@@ -227,6 +227,20 @@ button:disabled { cursor: default; opacity: .42; }
 .viewer-panel > span, .viewer-panel > small { flex-basis: 100%; color: #777; font-size: .5rem; letter-spacing: .1em; }
 .viewer-panel label { font-size: .58rem; letter-spacing: .07em; }
 .viewer-panel input[type="checkbox"] { margin: 0 7px 0 0; accent-color: #fff; }
+.collection-panel { max-height: min(42dvh, 340px); display: block; overflow: hidden; }
+.viewer-panel-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; }
+.viewer-panel-heading span, .viewer-panel-heading small { color: #888; font-size: .5rem; letter-spacing: .1em; }
+.viewer-collection-list { max-height: min(32dvh, 260px); overflow-y: auto; border-top: 1px solid #333; }
+.viewer-collection-option { width: 100%; min-height: 46px; padding: 7px 9px; display: flex; align-items: center; justify-content: space-between; gap: 14px; color: #aaa; border-bottom: 1px solid #333; text-align: left; transition: color 120ms ease, background 120ms ease; }
+.viewer-collection-option:disabled { opacity: 1; }
+.viewer-collection-option > span { min-width: 0; display: flex; align-items: center; gap: 10px; overflow: hidden; font-size: .62rem; letter-spacing: .07em; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-collection-option i { flex: 0 0 22px; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #666; border-radius: 50%; font-size: .68rem; font-style: normal; }
+.viewer-collection-option small { flex: 0 0 auto; color: #777; font-size: .48rem; letter-spacing: .1em; }
+.viewer-collection-option.selected { color: #111; background: #f7f7f3; }
+.viewer-collection-option.selected i { color: #f7f7f3; border-color: #111; background: #111; }
+.viewer-collection-option.selected small { color: #111; font-weight: 600; }
+.viewer-collection-error, .viewer-collection-empty { display: block; margin: 10px 0 0; color: #d88780; font-size: .49rem; line-height: 1.5; letter-spacing: .09em; }
+.viewer-collection-empty { color: #777; }
 .tag-form { display: grid; grid-template-columns: 1fr auto; }
 .tag-form label { grid-column: 1/-1; color: #777; }
 .tag-form input { min-width: 0; padding: 8px 0; color: #fff; border: 0; border-bottom: 1px solid #555; outline: 0; background: transparent; font-size: .65rem; }
