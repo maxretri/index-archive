@@ -40,6 +40,10 @@ The webhook independently trusts only Telegram requests carrying the configured 
 - `collection_files`: many-to-many membership with ownership duplicated for enforceable RLS.
 - `collection_shares`: revocable read-only collection capabilities; only SHA-256 token hashes are stored.
 - `tags` and `file_tags`: normalized user-owned tags and memberships.
+- `subscription_checkout_intents`: short-lived, identity-bound Telegram Stars checkout state.
+- `star_payments`: immutable idempotency and audit records for confirmed Stars charges.
+- `subscriptions`: current PLUS entitlement, renewal date, and cancellation state.
+- `payment_support_requests`: user-submitted payment cases from `/paysupport`.
 
 Original binaries are never stored in Supabase. `files.telegram_file_id` points to the Telegram-hosted binary. A smaller Telegram photo size or media thumbnail is retained as `telegram_thumbnail_file_id` for grid requests.
 
@@ -60,6 +64,14 @@ The browser uploads one file with progress to the authenticated server. The serv
 ### Collection sharing
 
 The owner creates a random 256-bit collection capability and uses Telegram's prepared-message recipient picker to share a Main Mini App deep link. The raw token appears only in that link; PostgreSQL stores its SHA-256 hash. A recipient still authenticates through signed Telegram `initData`, then receives read-only, cursor-paginated metadata. Shared binary reads validate the active capability, collection membership, and file owner before resolving Telegram storage. `STOP SHARING` revokes every active capability for the collection immediately.
+
+### INDEX PLUS through Telegram Stars
+
+The authenticated Mini App asks the server for a recurring 299 XTR invoice. The server creates a random checkout payload bound to the internal user and signed Telegram user, persists a 15-minute intent, then asks Telegram for an invoice link with a 30-day subscription period. Telegram displays and owns the payment interface.
+
+Before charging, Telegram sends `pre_checkout_query` to the secret-protected webhook. The server revalidates currency, amount, both identities, expiry, and current entitlement, then atomically marks the intent approved. Only a subsequent `successful_payment` update creates an idempotent charge record and extends PLUS to Telegram's reported subscription expiration. Cancel/resume operations use the first Telegram charge ID and never modify entitlement merely from browser state.
+
+Official Telegram sponsored messages and Mini App sponsorship are separate. Telegram controls official ads in eligible bot chats. The web application can only render its own sponsor inventory; this first-party slot is visible to FREE accounts and absent for active PLUS accounts.
 
 ## Performance
 

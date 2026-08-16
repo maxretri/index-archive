@@ -8,8 +8,10 @@ import { Library } from "./components/Library";
 import { Viewer } from "./components/Viewer";
 import { CollectionShareControls } from "./components/CollectionShareControls";
 import { SharedCollection } from "./components/SharedCollection";
+import { Membership } from "./components/Membership";
+import { SponsorSlot } from "./components/SponsorSlot";
 
-type Screen = "library" | "search" | "collections";
+type Screen = "library" | "search" | "collections" | "membership";
 
 export function App() {
   const sharedToken = collectionShareToken();
@@ -17,7 +19,7 @@ export function App() {
 }
 
 function IndexApp() {
-  const [screen, setScreen] = useState<Screen>("library");
+  const [screen, setScreen] = useState<Screen>(new URLSearchParams(window.location.search).get("screen") === "plus" ? "membership" : "library");
   const [filter, setFilter] = useState<LibraryFilter>("all");
   const [collection, setCollection] = useState<Collection>();
   const [viewer, setViewer] = useState<{ id: string; files: ArchiveFile[] }>();
@@ -46,6 +48,7 @@ function IndexApp() {
           <div className="nav-break" />
           <NavButton label="SEARCH" active={screen === "search"} onClick={() => { setScreen("search"); setCollection(undefined); }} />
           <NavButton label="COLLECTIONS" active={screen === "collections"} onClick={() => { setScreen("collections"); setCollection(undefined); }} />
+          <NavButton label="PLUS" active={screen === "membership"} onClick={() => { setScreen("membership"); setCollection(undefined); }} />
         </aside>
 
         <main className="main-content">
@@ -64,6 +67,8 @@ function IndexApp() {
             {search.query ? <Library filter="all" q={search.query} from={toIso(search.from, false)} to={toIso(search.to, true)} onOpen={openFile} /> : <div className="search-prompt"><p>FIND WHAT YOU SENT.</p><span>SEARCH FILENAME, FILE TYPE, CAPTION, DATE OR TAG.</span></div>}
           </>}
           {screen === "collections" && <><PageHeading title="COLLECTIONS" meta="VIRTUAL GROUPS" /><Collections onOpen={(selected) => { setCollection(selected); setFilter("all"); setScreen("library"); }} /></>}
+          {screen === "membership" && <><PageHeading title="PLUS" meta="INDEX MEMBERSHIP" /><Membership /></>}
+          {screen !== "membership" && <SponsorSlot onOpenPlus={() => { setCollection(undefined); setScreen("membership"); }} />}
           <footer className="privacy-note">INDEX ONLY KNOWS WHAT YOU EXPLICITLY SEND, FORWARD OR UPLOAD. IT DOES NOT READ YOUR CHATS OR SAVED MESSAGES.</footer>
         </main>
       </div>
@@ -72,6 +77,7 @@ function IndexApp() {
         <button className={screen === "library" ? "active" : ""} onClick={() => openLibrary("all")}>INDEX</button>
         <button className={screen === "search" ? "active" : ""} onClick={() => setScreen("search")}>SEARCH</button>
         <button className={screen === "collections" ? "active" : ""} onClick={() => setScreen("collections")}>COLLECTIONS</button>
+        <button className={screen === "membership" ? "active" : ""} onClick={() => setScreen("membership")}>PLUS</button>
       </nav>
       {viewer && <Viewer initialId={viewer.id} files={viewer.files} onClose={() => setViewer(undefined)} />}
     </div>

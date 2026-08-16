@@ -2,7 +2,7 @@
 
 ## 1. Database
 
-Create the Supabase project and apply `supabase/migrations/0001_initial.sql`, followed by `0002_search_relations.sql`. Keep the project URL and service-role key for the server deployment.
+Create the Supabase project and apply every ordered SQL file in `supabase/migrations/`. Keep the project URL and service-role key for the server deployment.
 
 ## 2. Server
 
@@ -51,9 +51,22 @@ Set `MINI_APP_URL` on the server to the deployed Mini App URL, then run:
 pnpm --filter @index/server bot:setup https://api.index.example
 ```
 
-The command registers the webhook with its secret header and configures the default `OPEN INDEX` menu button. Complete any requested Web App/domain configuration through BotFather.
+The command registers the webhook with its secret header, including the `pre_checkout_query` update type, configures the default `OPEN INDEX` menu button, and publishes the payment-support commands. Complete any requested Web App/domain configuration through BotFather.
 
-## 5. Smoke test — first magic moment
+## 5. Telegram Stars smoke test
+
+Use a dedicated Telegram test account before announcing PLUS publicly:
+
+1. Open `PLUS` in the Mini App and confirm the Telegram invoice says `299 XTR` and renews every 30 days.
+2. Complete one real Stars payment; do not treat the invoice callback alone as proof of entitlement.
+3. Confirm the Mini App changes to `INDEX PLUS IS ACTIVE`, shows the paid-through date, and removes the internal sponsor slot.
+4. Send `/paysupport TEST` and confirm a row appears in `payment_support_requests`.
+5. Cancel renewal, verify access remains active until the displayed period end, then resume it.
+6. Confirm a repeated `successful_payment` update cannot duplicate `star_payments`.
+
+Telegram's official ad eligibility and sponsored-message delivery are controlled by Telegram and require no ad script in the Mini App. Add real Mini App sponsor inventory only through a separately reviewed commercial integration.
+
+## 6. Smoke test — first magic moment
 
 1. Open the bot and press Start.
 2. Forward a photo to it.

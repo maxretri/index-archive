@@ -159,6 +159,66 @@ export async function prepareCollectionShare(
   }), { "content-type": "application/json" });
 }
 
+export async function createPlusInvoiceLink(config: Config, payload: string) {
+  return telegramCall<string>(config, "createInvoiceLink", JSON.stringify({
+    title: "INDEX PLUS",
+    description: "Ad-free INDEX membership. Renews every 30 days until canceled.",
+    payload,
+    currency: "XTR",
+    prices: [{ label: "INDEX PLUS · 30 DAYS", amount: 299 }],
+    subscription_period: 2_592_000
+  }), { "content-type": "application/json" });
+}
+
+export async function answerPreCheckout(config: Config, queryId: string, ok: boolean, errorMessage?: string) {
+  return telegramCall<boolean>(config, "answerPreCheckoutQuery", JSON.stringify({
+    pre_checkout_query_id: queryId,
+    ok,
+    ...(ok ? {} : { error_message: errorMessage ?? "INDEX PLUS checkout is unavailable." })
+  }), { "content-type": "application/json" });
+}
+
+export async function editPlusSubscription(config: Config, telegramUserId: number, chargeId: string, isCanceled: boolean) {
+  return telegramCall<boolean>(config, "editUserStarSubscription", JSON.stringify({
+    user_id: telegramUserId,
+    telegram_payment_charge_id: chargeId,
+    is_canceled: isCanceled
+  }), { "content-type": "application/json" });
+}
+
+export async function sendPlusActiveReply(config: Config, chatId: number, periodEnd: Date) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: `INDEX PLUS ACTIVE.\n299 STARS / 30 DAYS.\nACTIVE UNTIL · ${periodEnd.toISOString().slice(0, 10)}`,
+    reply_markup: openIndexMarkup(config)
+  }), { "content-type": "application/json" });
+}
+
+export async function sendPaymentSupportReply(config: Config, chatId: number, received: boolean) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: received
+      ? "PAYMENT SUPPORT REQUEST RECEIVED.\nWE WILL REVIEW IT MANUALLY."
+      : "PAYMENT SUPPORT\nUSE: /paysupport DESCRIBE YOUR PAYMENT ISSUE\n\nDO NOT SEND PASSWORDS OR CARD DETAILS. TELEGRAM SUPPORT CANNOT RESOLVE INDEX PURCHASES."
+  }), { "content-type": "application/json" });
+}
+
+export async function sendTermsReply(config: Config, chatId: number) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: "INDEX TERMS & SUBSCRIPTION TERMS",
+    reply_markup: { inline_keyboard: [[{ text: "OPEN TERMS", url: `${config.MINI_APP_URL.replace(/\/$/, "")}/terms.html` }]] }
+  }), { "content-type": "application/json" });
+}
+
+export async function sendPlusOpenReply(config: Config, chatId: number) {
+  return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
+    chat_id: chatId,
+    text: "INDEX PLUS\n299 STARS / 30 DAYS\nRECURRING · CANCEL ANYTIME",
+    reply_markup: { inline_keyboard: [[{ text: "OPEN INDEX PLUS", web_app: { url: `${config.MINI_APP_URL}${config.MINI_APP_URL.includes("?") ? "&" : "?"}screen=plus` } }]] }
+  }), { "content-type": "application/json" });
+}
+
 export async function sendUploadToTelegram(
   config: Config,
   chatId: number,
@@ -191,7 +251,7 @@ export async function configureTelegramBot(config: Config, webhookUrl: string) {
   const webhook = await telegramCall<boolean>(config, "setWebhook", JSON.stringify({
     url: webhookUrl,
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
-    allowed_updates: ["message", "callback_query"],
+    allowed_updates: ["message", "callback_query", "pre_checkout_query"],
     drop_pending_updates: false
   }), { "content-type": "application/json" });
   const menu = await telegramCall<boolean>(config, "setChatMenuButton", JSON.stringify({
@@ -201,7 +261,10 @@ export async function configureTelegramBot(config: Config, webhookUrl: string) {
     { command: "start", description: "Open INDEX" },
     { command: "collections", description: "Choose an active collection" },
     { command: "newcollection", description: "Create and select a collection" },
-    { command: "nocollection", description: "Save to the main index" }
+    { command: "nocollection", description: "Save to the main index" },
+    { command: "plus", description: "Open INDEX PLUS" },
+    { command: "paysupport", description: "Payment support" },
+    { command: "terms", description: "Terms and subscription terms" }
   ] }), { "content-type": "application/json" });
   return webhook && menu && commands;
 }

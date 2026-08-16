@@ -1,4 +1,4 @@
-import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles, SharedCollectionPage } from "@index/shared";
+import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles, SharedCollectionPage, SubscriptionStatus } from "@index/shared";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const sessionKey = "index.session";
@@ -24,6 +24,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   authenticate: (initData: string) => request<AuthResponse>("/auth/telegram", { method: "POST", body: JSON.stringify({ initData }) }),
+  subscription: () => request<SubscriptionStatus>("/api/subscription"),
+  subscriptionCheckout: () => request<{ invoiceLink: string }>("/api/subscription/checkout", { method: "POST" }),
+  cancelSubscription: () => request<SubscriptionStatus>("/api/subscription/cancel", { method: "POST" }),
+  resumeSubscription: () => request<SubscriptionStatus>("/api/subscription/resume", { method: "POST" }),
   files: (params: { filter: LibraryFilter; cursor?: string; q?: string; collectionId?: string; from?: string; to?: string }) => {
     const query = new URLSearchParams({ filter: params.filter, limit: "30" });
     if (params.cursor) query.set("cursor", params.cursor);

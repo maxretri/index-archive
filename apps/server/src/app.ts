@@ -11,6 +11,7 @@ import { fileRoutes } from "./routes/files.js";
 import { uploadRoutes } from "./routes/upload.js";
 import { webhookRoutes } from "./routes/webhook.js";
 import { sharedCollectionRoutes } from "./routes/shared-collections.js";
+import { subscriptionRoutes } from "./routes/subscription.js";
 
 export async function buildApp(config: Config, database = createDatabase(config)) {
   const app = Fastify({
@@ -34,6 +35,7 @@ export async function buildApp(config: Config, database = createDatabase(config)
   await fileRoutes(app, services, authenticate);
   await collectionRoutes(app, services, authenticate);
   await sharedCollectionRoutes(app, services, authenticate);
+  await subscriptionRoutes(app, services, authenticate);
   await uploadRoutes(app, services, authenticate);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {

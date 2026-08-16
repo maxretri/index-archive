@@ -41,6 +41,26 @@ export interface TelegramMessage {
   video?: TelegramFile;
   document?: TelegramFile;
   audio?: TelegramFile;
+  successful_payment?: TelegramSuccessfulPayment;
+}
+
+export interface TelegramSuccessfulPayment {
+  currency: string;
+  total_amount: number;
+  invoice_payload: string;
+  telegram_payment_charge_id: string;
+  provider_payment_charge_id?: string;
+  subscription_expiration_date?: number;
+  is_recurring?: boolean;
+  is_first_recurring?: boolean;
+}
+
+export interface TelegramPreCheckoutQuery {
+  id: string;
+  from: TelegramUser;
+  currency: string;
+  total_amount: number;
+  invoice_payload: string;
 }
 
 export interface TelegramCallbackQuery {
@@ -50,7 +70,12 @@ export interface TelegramCallbackQuery {
   data?: string;
 }
 
-export interface TelegramUpdate { update_id: number; message?: TelegramMessage; callback_query?: TelegramCallbackQuery }
+export interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
+  pre_checkout_query?: TelegramPreCheckoutQuery;
+}
 
 export interface SessionUser {
   id: string;

@@ -30,6 +30,8 @@ The bot only indexes files a user explicitly sends, forwards, or uploads. Origin
 - Revocable read-only collection links shared through Telegram's native recipient picker
 - Search across filename, type, MIME type, caption, tags, collections, and date range
 - Mini App uploads with progress; the server sends the binary through Telegram before indexing it
+- Recurring INDEX PLUS membership through Telegram Stars: `299 XTR` every 30 days, with cancel/resume controls
+- A restrained first-party sponsor placement for FREE accounts, removed immediately for active PLUS members
 - Mobile-first Telegram viewport and safe-area behavior
 
 ## Repository
@@ -89,12 +91,24 @@ pnpm --filter @index/server bot:setup https://api.index.example
 
 The command registers `https://api.index.example/telegram/webhook` with Telegram's secret-token header and sets the bot's menu button to `MINI_APP_URL`. Configure the Mini App domain in BotFather when prompted by Telegram.
 
-The bot is intentionally not conversational. Unsupported messages are ignored.
+The bot is intentionally not conversational. Unsupported messages are ignored. `/plus` opens the membership screen, `/terms` shows the subscription terms, and `/paysupport DESCRIPTION` creates a payment-support request.
+
+## Membership and advertising
+
+INDEX PLUS is a recurring digital subscription sold through Telegram Stars for **299 Stars every 30 days**. Telegram creates the invoice UI, the server validates the pre-checkout query, and PLUS is granted only after Telegram sends a valid `successful_payment` webhook. Renewal, cancellation, payment history, and entitlement expiry are stored as metadata in Postgres; no payment-card data reaches INDEX.
+
+Telegram's official sponsored messages are placed by Telegram in eligible public bot chats and revenue sharing is controlled by Telegram. They cannot be manually embedded inside a Mini App. INDEX therefore keeps the two surfaces separate:
+
+- the bot chat may receive official Telegram sponsored messages when Telegram marks it eligible;
+- the Mini App contains an INDEX-controlled sponsor slot for FREE members;
+- INDEX PLUS removes INDEX-controlled sponsored placements.
+
+The initial sponsor slot is a house placement for INDEX PLUS. Connecting a real sponsor or an external ad network is a later commercial integration, not a hidden mock integration.
 
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/0001_initial.sql` and then `0002_search_relations.sql` in SQL Editor, or link the Supabase CLI and run `supabase db push`.
+2. Apply every ordered file in `supabase/migrations/`, or link the Supabase CLI and run `supabase db push`.
 3. Copy the project URL and **service role** key into the server environment only.
 4. Never create a `VITE_SUPABASE_SERVICE_ROLE_KEY`; every `VITE_` variable is browser-visible.
 
@@ -126,6 +140,8 @@ See [.env.example](.env.example) for the complete list.
 - Telegram file IDs and bot tokens never appear in metadata responses.
 - Binary endpoints check ownership before resolving a Telegram file path.
 - Collection links are random capability tokens; Postgres stores only their SHA-256 hashes. Shared views are read-only, membership-scoped, Telegram-authenticated, and revocable by the owner.
+- PLUS checkout payloads are random, short-lived, bound to both internal and Telegram identities, and consumed through an atomic pre-checkout transition.
+- Successful Stars charges are stored idempotently by Telegram charge ID. A browser response alone never grants PLUS.
 - Upload counts and sizes are limited; filenames and response headers are sanitized.
 - Authentication and webhook secrets are redacted from server logs.
 

@@ -47,6 +47,13 @@ export interface AppUser {
 
 export interface AuthResponse { token: string; expiresIn: number; user: AppUser }
 
+export interface SubscriptionStatus {
+  plan: "free" | "plus";
+  priceStars: 299;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
 export function formatBytes(value: number | null): string {
   if (value === null) return "—";
   if (value < 1024) return `${value} B`;

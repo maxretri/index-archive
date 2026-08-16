@@ -5,6 +5,8 @@ import { ingestMessage } from "../telegram/ingest.js";
 import { sendMediaGroupSavedReply, sendWelcomeReply } from "../telegram/api.js";
 import { handleCollectionCallback, handleCollectionCommand } from "../telegram/collection-commands.js";
 import { MediaGroupReplyBatcher } from "../telegram/media-group-batcher.js";
+import { handlePlusPreCheckout, handleSuccessfulPlusPayment } from "../telegram/payments.js";
+import { handleBillingCommand } from "../telegram/support.js";
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
@@ -29,10 +31,18 @@ export async function webhookRoutes(app: FastifyInstance, services: Services) {
       return reply.code(401).send({ ok: false });
     }
     const update = request.body as TelegramUpdate;
+    if (update?.pre_checkout_query) {
+      await handlePlusPreCheckout(services, update.pre_checkout_query);
+      return reply.send({ ok: true });
+    }
     if (update?.callback_query) await handleCollectionCallback(services, update.callback_query);
     if (update?.message) {
-      if (isStartCommand(update.message.text)) {
+      if (update.message.successful_payment) {
+        await handleSuccessfulPlusPayment(services, update.message);
+      } else if (isStartCommand(update.message.text)) {
         await sendWelcomeReply(services.config, update.message.chat.id);
+      } else if (await handleBillingCommand(services, update.message)) {
+        // Billing commands and support requests are never ingested.
       } else if (await handleCollectionCommand(services, update.message)) {
         // Collection commands are complete bot interactions and are not ingested.
       } else if (update.message.media_group_id) {
