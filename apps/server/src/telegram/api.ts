@@ -138,6 +138,13 @@ export async function answerCallback(config: Config, callbackQueryId: string, te
   }), { "content-type": "application/json" });
 }
 
+export async function deleteTelegramMessages(config: Config, chatId: number, messageIds: number[]) {
+  return telegramCall<boolean>(config, "deleteMessages", JSON.stringify({
+    chat_id: chatId,
+    message_ids: messageIds
+  }), { "content-type": "application/json" });
+}
+
 interface PreparedInlineMessage {
   id: string;
   expiration_date: number;

@@ -20,6 +20,7 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
   const [isFavorite, setIsFavorite] = useState(file.isFavorite);
   const [collectionIds, setCollectionIds] = useState(file.collectionIds);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -38,6 +39,7 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
     setIsFavorite(file.isFavorite);
     setCollectionIds(file.collectionIds);
     setShareError(null);
+    setConfirmDelete(false);
     setPanel("none");
   }, [file.id, file.collectionIds, file.isFavorite, file.tags]);
 
@@ -68,6 +70,15 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
       });
     },
     onError: () => setShareError("FORWARD FAILED · TRY AGAIN")
+  });
+  const deleteFile = useMutation({
+    mutationFn: () => api.deleteFiles([file.id]),
+    onSuccess: async ({ telegramCleanup }) => {
+      await invalidate();
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
+      if (!telegramCleanup) window.Telegram?.WebApp.showAlert?.("Removed from INDEX. Telegram could not remove the older chat message.");
+      onClose();
+    }
   });
 
   const navigate = (direction: -1 | 1) => {
@@ -117,9 +128,15 @@ export function Viewer({ initialId, files, sharedToken, onClose }: Props) {
           <button className={isFavorite ? "active" : ""} disabled={favorite.isPending} onClick={() => favorite.mutate()}>{isFavorite ? "FAVORITED" : "FAVORITE"}</button>
           <button onClick={() => setPanel(panel === "collections" ? "none" : "collections")}>COLLECTION</button>
           <button onClick={() => setPanel(panel === "tags" ? "none" : "tags")}>TAGS</button>
+          <button className="delete-action" onClick={() => { setPanel("none"); setConfirmDelete(true); }}>DELETE</button>
         </div>}
         {sharedToken && <div className="shared-readonly">SHARED COLLECTION · READ ONLY</div>}
         {shareError && <div className="viewer-action-error">{shareError}</div>}
+        {confirmDelete && !sharedToken && <div className="viewer-delete-confirm" role="alertdialog" aria-label="Delete file">
+          <p>REMOVE THIS FILE FROM INDEX? TELEGRAM WILL ALSO REMOVE THE CHAT MESSAGE WHEN ALLOWED.</p>
+          {deleteFile.error && <span>{deleteFile.error.message}</span>}
+          <div><button onClick={() => setConfirmDelete(false)}>CANCEL</button><button disabled={deleteFile.isPending} onClick={() => deleteFile.mutate()}>{deleteFile.isPending ? "DELETING" : "CONFIRM DELETE"}</button></div>
+        </div>}
         {panel === "collections" && <div className="viewer-panel">
           <span>ADD TO COLLECTION</span>
           {collections.data?.map((collection) => {

@@ -48,6 +48,10 @@ export const api = {
     body: JSON.stringify({ fileIds, collectionIds })
   }),
   favorite: (id: string, favorite: boolean) => request<{ id: string; isFavorite: boolean }>(`/api/files/${id}/favorite`, { method: "PATCH", body: JSON.stringify({ favorite }) }),
+  deleteFiles: (fileIds: string[]) => request<{ deletedIds: string[]; telegramCleanup: boolean }>("/api/files/delete", {
+    method: "POST",
+    body: JSON.stringify({ fileIds })
+  }),
   prepareShare: (id: string) => request<{ messageId: string; expiresAt: number }>(`/api/files/${id}/share`, { method: "POST" }),
   setCollections: (id: string, collectionIds: string[]) => request<{ collectionIds: string[] }>(`/api/files/${id}/collections`, { method: "PUT", body: JSON.stringify({ collectionIds }) }),
   setTags: (id: string, tags: string[]) => request<{ tags: string[] }>(`/api/files/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),

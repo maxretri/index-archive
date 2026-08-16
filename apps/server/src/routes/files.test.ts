@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import { buildApp } from "../app.js";
-import { createFilePreviewToken } from "../security/session.js";
+import { createFilePreviewToken, createSession } from "../security/session.js";
 import { fileTypesForFilter } from "./files.js";
 
 const config: Config = {
@@ -67,6 +67,133 @@ describe("PDF streaming preview", () => {
     expect(response.headers["content-range"]).toBe("bytes 0-12/100");
     expect(response.body).toBe("%PDF-streamed");
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ headers: { range: "bytes=0-12" } });
+    await app.close();
+  });
+});
+
+describe("file deletion", () => {
+  const userId = "b8dd939e-b670-4208-b845-a1aa0f299c66";
+  const fileId = "ca02001b-8f4f-4dfc-b3ff-105bc67615f1";
+
+  function deletionDb(ownedFiles: Array<{ id: string; telegram_chat_id: number; telegram_message_id: number }>) {
+    let deletionStarted = false;
+    let deleteCalls = 0;
+    const ownerFilters: unknown[] = [];
+    return {
+      state: { get deleteCalls() { return deleteCalls; }, ownerFilters },
+      client: {
+        from(table: string) {
+          if (table !== "files") throw new Error(`Unexpected table ${table}`);
+          let mode: "read" | "delete" = "read";
+          return {
+            select() {
+              if (mode === "delete") {
+                return Promise.resolve({ data: ownedFiles.map(({ id }) => ({ id })), error: null });
+              }
+              return this;
+            },
+            eq(column: string, value: unknown) {
+              if (column === "user_id") ownerFilters.push(value);
+              return this;
+            },
+            in() {
+              return mode === "read" ? Promise.resolve({ data: ownedFiles, error: null }) : this;
+            },
+            delete() {
+              if (deletionStarted) throw new Error("Duplicate delete");
+              deletionStarted = true;
+              deleteCalls += 1;
+              mode = "delete";
+              return this;
+            }
+          };
+        }
+      }
+    };
+  }
+
+  it("rejects deletion without a signed application session before touching the database", async () => {
+    let queried = false;
+    const app = await buildApp(config, { from: () => {
+      queried = true;
+      throw new Error("must not query");
+    } } as never);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/files/delete",
+      payload: { fileIds: [fileId] }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(queried).toBe(false);
+    await app.close();
+  });
+
+  it("deletes only owner-scoped metadata and removes the Telegram message", async () => {
+    const db = deletionDb([{ id: fileId, telegram_chat_id: 100200300, telegram_message_id: 77 }]);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, result: true }), {
+      status: 200, headers: { "content-type": "application/json" }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const app = await buildApp(config, db.client as never);
+    const token = await createSession({ id: userId, telegramUserId: "100200300" }, config.SESSION_SECRET, 60);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/files/delete",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fileIds: [fileId] }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ deletedIds: [fileId], telegramCleanup: true });
+    expect(db.state.deleteCalls).toBe(1);
+    expect(db.state.ownerFilters).toEqual([userId, userId]);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/deleteMessages");
+    expect(JSON.parse(String(options.body))).toEqual({ chat_id: 100200300, message_ids: [77] });
+    await app.close();
+  });
+
+  it("refuses the whole request when any file is not owned by the user", async () => {
+    const db = deletionDb([]);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const app = await buildApp(config, db.client as never);
+    const token = await createSession({ id: userId, telegramUserId: "100200300" }, config.SESSION_SECRET, 60);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/files/delete",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fileIds: [fileId] }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(db.state.deleteCalls).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("keeps deletion successful when Telegram can no longer remove an old message", async () => {
+    const db = deletionDb([{ id: fileId, telegram_chat_id: 100200300, telegram_message_id: 77 }]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: false, description: "Bad Request: message can't be deleted"
+    }), { status: 400, headers: { "content-type": "application/json" } })));
+    const app = await buildApp(config, db.client as never);
+    const token = await createSession({ id: userId, telegramUserId: "100200300" }, config.SESSION_SECRET, 60);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/files/delete",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fileIds: [fileId] }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ deletedIds: [fileId], telegramCleanup: false });
+    expect(db.state.deleteCalls).toBe(1);
     await app.close();
   });
 });

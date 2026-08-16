@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Services } from "../types.js";
 import { createFilePreviewToken, verifyFilePreviewToken } from "../security/session.js";
-import { preparePhotoShare, resolveTelegramFile } from "../telegram/api.js";
+import { deleteTelegramMessages, preparePhotoShare, resolveTelegramFile } from "../telegram/api.js";
 
 const idSchema = z.string().uuid();
 const listSchema = z.object({
@@ -152,6 +152,54 @@ export async function fileRoutes(app: FastifyInstance, services: Services, authe
       reply.header("content-disposition", `attachment; filename="${safeName}"`);
     }
     return reply.send(Readable.fromWeb(upstream.body as never));
+  });
+
+  app.post("/api/files/delete", {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 20, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const body = z.object({ fileIds: z.array(z.string().uuid()).min(1).max(200) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Select files to delete" });
+    const userId = request.sessionUser!.id;
+    const fileIds = [...new Set(body.data.fileIds)];
+    const { data: ownedFiles, error: readError } = await services.db.from("files")
+      .select("id,telegram_chat_id,telegram_message_id")
+      .eq("user_id", userId)
+      .in("id", fileIds);
+    if (readError) throw readError;
+    if ((ownedFiles?.length ?? 0) !== fileIds.length) {
+      return reply.code(404).send({ error: "One or more files were not found" });
+    }
+
+    const { data: deleted, error: deleteError } = await services.db.from("files")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", fileIds)
+      .select("id");
+    if (deleteError) throw deleteError;
+    if ((deleted?.length ?? 0) !== fileIds.length) throw new Error("File deletion was incomplete");
+
+    let telegramCleanup = true;
+    const messagesByChat = new Map<number, number[]>();
+    for (const file of ownedFiles ?? []) {
+      const chatId = Number(file.telegram_chat_id);
+      const messageId = Number(file.telegram_message_id);
+      if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(messageId)) {
+        telegramCleanup = false;
+        continue;
+      }
+      messagesByChat.set(chatId, [...(messagesByChat.get(chatId) ?? []), messageId]);
+    }
+    for (const [chatId, messageIds] of messagesByChat) {
+      for (let offset = 0; offset < messageIds.length; offset += 100) {
+        try {
+          await deleteTelegramMessages(services.config, chatId, messageIds.slice(offset, offset + 100));
+        } catch {
+          telegramCleanup = false;
+        }
+      }
+    }
+    return reply.send({ deletedIds: fileIds, telegramCleanup });
   });
 
   app.post("/api/files/:id/preview-token", {

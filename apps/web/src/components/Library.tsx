@@ -23,6 +23,7 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showCollections, setShowCollections] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [targetCollections, setTargetCollections] = useState<Set<string>>(new Set());
   const [newCollectionName, setNewCollectionName] = useState("");
   const query = useInfiniteQuery({
@@ -67,11 +68,26 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
       window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
     }
   });
+  const deleteFiles = useMutation({
+    mutationFn: () => api.deleteFiles([...selected]),
+    onSuccess: async ({ telegramCleanup }) => {
+      setShowDelete(false);
+      setSelecting(false);
+      setSelected(new Set());
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["files"] }),
+        queryClient.invalidateQueries({ queryKey: ["collections"] })
+      ]);
+      window.Telegram?.WebApp.HapticFeedback?.notificationOccurred("success");
+      if (!telegramCleanup) window.Telegram?.WebApp.showAlert?.("Removed from INDEX. Telegram could not remove one or more older chat messages.");
+    }
+  });
 
   useEffect(() => {
     setSelecting(false);
     setSelected(new Set());
     setShowCollections(false);
+    setShowDelete(false);
     setTargetCollections(new Set());
     setNewCollectionName("");
   }, [filter, q, collectionId, from, to]);
@@ -103,8 +119,9 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
           setSelecting((value) => !value);
           setSelected(new Set());
           setShowCollections(false);
+          setShowDelete(false);
         }}>{selecting ? "CANCEL" : "SELECT"}</button>
-        {selecting && <><span>{selected.size} SELECTED</span><button disabled={!selected.size} onClick={() => setShowCollections(true)}>ADD TO COLLECTION</button></>}
+        {selecting && <><span>{selected.size} SELECTED</span><div className="selection-actions"><button disabled={!selected.size} onClick={() => setShowCollections(true)}>ADD TO COLLECTION</button><button className="selection-delete" disabled={!selected.size} onClick={() => setShowDelete(true)}>DELETE</button></div></>}
       </div>
       {groups.map(([month, monthFiles]) => {
         const visual = monthFiles.filter((file) => file.type === "photo" || file.type === "video");
@@ -158,6 +175,16 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
           {addToCollections.error && <p className="bulk-error">{addToCollections.error.message}</p>}
           <button className="bulk-confirm" disabled={!targetCollections.size || addToCollections.isPending} onClick={() => addToCollections.mutate()}>
             {addToCollections.isPending ? "ADDING" : `ADD TO ${targetCollections.size || "—"} ${targetCollections.size === 1 ? "COLLECTION" : "COLLECTIONS"}`}
+          </button>
+        </section>
+      </div>}
+      {showDelete && <div className="bulk-sheet-backdrop" role="presentation" onClick={() => setShowDelete(false)}>
+        <section className="bulk-sheet bulk-delete-sheet" role="alertdialog" aria-modal="true" aria-label="Delete selected files" onClick={(event) => event.stopPropagation()}>
+          <header><span>DELETE {selected.size} {selected.size === 1 ? "ITEM" : "ITEMS"}?</span><button onClick={() => setShowDelete(false)}>CLOSE</button></header>
+          <p className="bulk-delete-copy">THESE FILES WILL BE REMOVED FROM INDEX, COLLECTIONS AND SHARED LINKS. TELEGRAM CHAT MESSAGES ARE ALSO REMOVED WHEN TELEGRAM ALLOWS IT; OLDER MESSAGES MAY REMAIN IN THE CHAT.</p>
+          {deleteFiles.error && <p className="bulk-error">{deleteFiles.error.message}</p>}
+          <button className="bulk-confirm destructive" disabled={deleteFiles.isPending} onClick={() => deleteFiles.mutate()}>
+            {deleteFiles.isPending ? "DELETING" : "DELETE PERMANENTLY"}
           </button>
         </section>
       </div>}
