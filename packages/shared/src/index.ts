@@ -1,7 +1,7 @@
 export const FILE_TYPES = ["photo", "video", "document", "audio"] as const;
 export type FileType = (typeof FILE_TYPES)[number];
 
-export type LibraryFilter = "all" | "photos" | "videos" | "files" | "favorites";
+export type LibraryFilter = "all" | "photos" | "videos" | "files" | "audio" | "favorites";
 
 export interface ArchiveFile {
   id: string;

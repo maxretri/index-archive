@@ -7,7 +7,7 @@ import { preparePhotoShare, resolveTelegramFile } from "../telegram/api.js";
 
 const idSchema = z.string().uuid();
 const listSchema = z.object({
-  filter: z.enum(["all", "photos", "videos", "files", "favorites"]).default("all"),
+  filter: z.enum(["all", "photos", "videos", "files", "audio", "favorites"]).default("all"),
   q: z.string().trim().max(120).optional(),
   collectionId: z.string().uuid().optional(),
   tag: z.string().trim().max(40).optional(),
@@ -43,10 +43,17 @@ function mapFile(row: FileRow, tags: string[], collectionIds: string[]): Archive
   };
 }
 
+export function fileTypesForFilter(filter: LibraryFilter): FileType[] | null {
+  if (filter === "photos") return ["photo"];
+  if (filter === "videos") return ["video"];
+  if (filter === "files") return ["document"];
+  if (filter === "audio") return ["audio"];
+  return null;
+}
+
 function applyTypeFilter<T extends { eq: (column: string, value: unknown) => T; in: (column: string, values: unknown[]) => T }>(query: T, filter: LibraryFilter) {
-  if (filter === "photos") return query.eq("file_type", "photo");
-  if (filter === "videos") return query.eq("file_type", "video");
-  if (filter === "files") return query.in("file_type", ["document", "audio"]);
+  const fileTypes = fileTypesForFilter(filter);
+  if (fileTypes?.length === 1) return query.eq("file_type", fileTypes[0]);
   if (filter === "favorites") return query.eq("is_favorite", true);
   return query;
 }

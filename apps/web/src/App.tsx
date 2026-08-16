@@ -38,6 +38,7 @@ function IndexApp() {
           <NavButton label="PHOTOS" active={screen === "library" && filter === "photos"} onClick={() => openLibrary("photos")} />
           <NavButton label="VIDEOS" active={screen === "library" && filter === "videos"} onClick={() => openLibrary("videos")} />
           <NavButton label="FILES" active={screen === "library" && filter === "files"} onClick={() => openLibrary("files")} />
+          <NavButton label="AUDIO" active={screen === "library" && filter === "audio"} onClick={() => openLibrary("audio")} />
           <NavButton label="FAVORITES" active={screen === "library" && filter === "favorites"} onClick={() => openLibrary("favorites")} />
           <div className="nav-break" />
           <NavButton label="SEARCH" active={screen === "search"} onClick={() => { setScreen("search"); setCollection(undefined); }} />
@@ -46,7 +47,8 @@ function IndexApp() {
 
         <main className="main-content">
           {screen === "library" && <>
-            <PageHeading title={collection?.name ?? filterLabel(filter)} meta={collection ? "COLLECTION" : "CHRONOLOGICAL INDEX"} />
+            <PageHeading title={collection?.name ?? filterLabel(filter)} meta={collection ? `COLLECTION / ${filterLabel(filter)}` : "CHRONOLOGICAL INDEX"} />
+            <LibraryFilters value={filter} onChange={setFilter} />
             <Library filter={filter} collectionId={collection?.id} onOpen={openFile} />
           </>}
           {screen === "search" && <>
@@ -101,6 +103,21 @@ function UploadButton() {
 
 function NavButton({ label, active, onClick }: { label: string; active: boolean; onClick(): void }) {
   return <button className={active ? "active" : ""} onClick={onClick}>{label}<span>{active ? "●" : ""}</span></button>;
+}
+
+const libraryFilters: { value: LibraryFilter; label: string }[] = [
+  { value: "all", label: "ALL" },
+  { value: "photos", label: "PHOTOS" },
+  { value: "videos", label: "VIDEOS" },
+  { value: "files", label: "FILES" },
+  { value: "audio", label: "AUDIO" },
+  { value: "favorites", label: "FAVORITES" }
+];
+
+function LibraryFilters({ value, onChange }: { value: LibraryFilter; onChange(filter: LibraryFilter): void }) {
+  return <nav className="library-filters" aria-label="File type">
+    {libraryFilters.map((item) => <button key={item.value} className={value === item.value ? "active" : ""} aria-pressed={value === item.value} onClick={() => onChange(item.value)}>{item.label}</button>)}
+  </nav>;
 }
 
 function PageHeading({ title, meta }: { title: string; meta: string }) {

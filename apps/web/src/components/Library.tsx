@@ -91,7 +91,7 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
   if (query.isError) return <div className="empty-state"><p>LIBRARY UNAVAILABLE</p><button onClick={() => void query.refetch()}>TRY AGAIN</button></div>;
   if (!files.length) return (
     <div className="empty-state">
-      <p>{q ? "NOTHING FOUND" : collectionId ? "COLLECTION EMPTY" : "YOUR INDEX IS EMPTY"}</p>
+      <p>{q ? "NOTHING FOUND" : collectionId ? `NO ${filterLabel(filter)} IN THIS COLLECTION` : emptyLabel(filter)}</p>
       <span>{q ? "TRY A FILENAME, TYPE, TAG OR DATE." : "SEND OR FORWARD A FILE TO THE INDEX BOT."}</span>
     </div>
   );
@@ -169,6 +169,16 @@ function extension(file: ArchiveFile) {
   if (file.type === "audio") return "AUDIO";
   const value = file.filename?.split(".").at(-1)?.toUpperCase();
   return value && value.length <= 5 ? value : "FILE";
+}
+
+function filterLabel(filter: LibraryFilter) {
+  return filter === "all" ? "ITEMS" : filter.toUpperCase();
+}
+
+function emptyLabel(filter: LibraryFilter) {
+  if (filter === "all") return "YOUR INDEX IS EMPTY";
+  if (filter === "favorites") return "NO FAVORITES YET";
+  return `NO ${filter.toUpperCase()} YET`;
 }
 
 function LibrarySkeleton() {
