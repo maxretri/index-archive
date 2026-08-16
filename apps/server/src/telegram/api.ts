@@ -70,16 +70,20 @@ export async function sendSharedCollectionOpen(
   chatId: number,
   collection: { name: string; itemCount: number },
   token: string,
-  delivery?: { copiedCount: number; truncated: boolean; grantId?: string }
+  delivery?: { copiedCount: number; truncated: boolean; grantId?: string; alreadyAccepted?: boolean }
 ) {
   const separator = config.MINI_APP_URL.includes("?") ? "&" : "?";
   const openParameter = delivery?.grantId
     ? `shared=${encodeURIComponent(delivery.grantId)}`
     : `share=${encodeURIComponent(`collection_${token}`)}`;
-  const deliveryText = delivery
-    ? `\n${delivery.copiedCount} ${delivery.copiedCount === 1 ? "FILE" : "FILES"} SENT TO THIS CHAT${delivery.truncated ? " · OPEN INDEX FOR THE REST" : ""}`
+  const deliveryText = delivery?.alreadyAccepted
+    ? "\nFILES WERE NOT SENT AGAIN"
+    : delivery
+      ? `\n${delivery.copiedCount} ${delivery.copiedCount === 1 ? "FILE" : "FILES"} SENT TO THIS CHAT${delivery.truncated ? " · OPEN INDEX FOR THE REST" : ""}`
+      : "";
+  const libraryText = delivery?.grantId
+    ? delivery.alreadyAccepted ? "\nALREADY IN YOUR SHARED LIBRARY" : "\nADDED TO YOUR SHARED LIBRARY"
     : "";
-  const libraryText = delivery?.grantId ? "\nADDED TO YOUR SHARED LIBRARY" : "";
   return telegramCall<TelegramMessage>(config, "sendMessage", JSON.stringify({
     chat_id: chatId,
     text: `SHARED INDEX COLLECTION · ${collection.name}\n${collection.itemCount} ${collection.itemCount === 1 ? "ITEM" : "ITEMS"}${deliveryText}${libraryText}\nREAD ONLY`,
