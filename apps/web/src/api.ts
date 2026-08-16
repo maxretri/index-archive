@@ -50,6 +50,10 @@ export const api = {
     if (!response.ok) throw new Error("File unavailable");
     return response.blob();
   },
+  pdfPreviewUrl: async (id: string) => {
+    const result = await request<{ token: string; expiresIn: number }>(`/api/files/${id}/preview-token`, { method: "POST" });
+    return `${API_URL}/api/files/${id}/preview?access=${encodeURIComponent(result.token)}`;
+  },
   upload: (file: File, onProgress: (progress: number) => void) => new Promise<{ id: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_URL}/api/uploads`);

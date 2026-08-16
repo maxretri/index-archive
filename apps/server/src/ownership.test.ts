@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Config } from "./config.js";
 import { buildApp } from "./app.js";
-import { createSession } from "./security/session.js";
+import { createFilePreviewToken, createSession } from "./security/session.js";
 
 const config: Config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
@@ -74,6 +74,28 @@ describe("ownership boundary", () => {
 
     expect(response.statusCode).toBe(404);
     expect(filters).toContainEqual(["user_id", userId]);
+    await app.close();
+  });
+
+  it("scopes PDF preview access to the user embedded in its server-signed token", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const query = {
+      select() { return this; },
+      eq(column: string, value: unknown) { filters.push([column, value]); return this; },
+      maybeSingle() { return Promise.resolve({ data: null, error: null }); }
+    };
+    const app = await buildApp(config, { from: () => query } as never);
+    const userId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
+    const fileId = "ca02001b-8f4f-4dfc-b3ff-105bc67615f1";
+    const token = await createFilePreviewToken(userId, fileId, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/files/${fileId}/preview?access=${encodeURIComponent(token)}`
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(filters).toContainEqual(["user_id", userId]);
+    expect(filters).toContainEqual(["id", fileId]);
     await app.close();
   });
 

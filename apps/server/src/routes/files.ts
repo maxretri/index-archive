@@ -3,6 +3,7 @@ import type { ArchiveFile, FileType, LibraryFilter } from "@index/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Services } from "../types.js";
+import { createFilePreviewToken, verifyFilePreviewToken } from "../security/session.js";
 import { preparePhotoShare, resolveTelegramFile } from "../telegram/api.js";
 
 const idSchema = z.string().uuid();
@@ -149,6 +150,61 @@ export async function fileRoutes(app: FastifyInstance, services: Services, authe
     if (query.data.download) {
       const safeName = String(data.filename ?? `index-${params.data.id}`).replace(/["\r\n]/g, "_");
       reply.header("content-disposition", `attachment; filename="${safeName}"`);
+    }
+    return reply.send(Readable.fromWeb(upstream.body as never));
+  });
+
+  app.post("/api/files/:id/preview-token", {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const params = z.object({ id: idSchema }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid file request" });
+    const token = await createFilePreviewToken(request.sessionUser!.id, params.data.id, services.config.SESSION_SECRET);
+    return reply.send({ token, expiresIn: 600 });
+  });
+
+  app.get("/api/files/:id/preview", {
+    logLevel: "silent",
+    config: { rateLimit: { max: 180, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const params = z.object({ id: idSchema }).safeParse(request.params);
+    const query = z.object({ access: z.string().min(20).max(4096) }).safeParse(request.query);
+    if (!params.success || !query.success) return reply.code(400).send({ error: "Invalid preview request" });
+
+    let preview: { userId: string; fileId: string };
+    try {
+      preview = await verifyFilePreviewToken(query.data.access, services.config.SESSION_SECRET);
+    } catch {
+      return reply.code(401).send({ error: "Invalid or expired preview" });
+    }
+    if (preview.fileId !== params.data.id) return reply.code(401).send({ error: "Invalid preview file" });
+
+    const { data, error } = await services.db.from("files")
+      .select("telegram_file_id,mime_type,filename")
+      .eq("user_id", preview.userId)
+      .eq("id", params.data.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return reply.code(404).send({ error: "File not found" });
+    if (data.mime_type !== "application/pdf") return reply.code(400).send({ error: "Preview is only available for PDF files" });
+
+    const telegramUrl = await resolveTelegramFile(services.config, data.telegram_file_id as string);
+    const range = typeof request.headers.range === "string" && /^bytes=\d*-\d*$/.test(request.headers.range)
+      ? request.headers.range : undefined;
+    const upstream = await fetch(telegramUrl, { headers: range ? { range } : undefined });
+    if ((!upstream.ok && upstream.status !== 206) || !upstream.body) {
+      return reply.code(upstream.status === 416 ? 416 : 502).send({ error: "Telegram file unavailable" });
+    }
+
+    reply.code(upstream.status === 206 ? 206 : 200);
+    reply.header("content-type", "application/pdf");
+    reply.header("accept-ranges", upstream.headers.get("accept-ranges") ?? "bytes");
+    reply.header("cache-control", "private, max-age=600");
+    reply.header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(String(data.filename ?? `index-${params.data.id}.pdf`))}`);
+    for (const header of ["content-length", "content-range", "etag", "last-modified"] as const) {
+      const value = upstream.headers.get(header);
+      if (value) reply.header(header, value);
     }
     return reply.send(Readable.fromWeb(upstream.body as never));
   });

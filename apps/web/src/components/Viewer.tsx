@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ArchiveFile } from "@index/shared";
 import { formatBytes, formatDuration } from "@index/shared";
 import { api } from "../api";
-import { useObjectUrl } from "../hooks";
 import { PrivateImage, PrivateVideo } from "./PrivateMedia";
 
 interface Props { initialId: string; files: ArchiveFile[]; onClose(): void }
@@ -146,7 +145,13 @@ function FilePreview({ file }: { file: ArchiveFile }) {
 }
 
 function PdfPreview({ fileId }: { fileId: string }) {
-  const { url, isLoading } = useObjectUrl(fileId, "original");
-  if (isLoading || !url) return <div className="viewer-loading">LOADING PDF</div>;
-  return <iframe className="pdf-preview" src={url} title="PDF preview" />;
+  const preview = useQuery({
+    queryKey: ["pdf-preview", fileId],
+    queryFn: () => api.pdfPreviewUrl(fileId),
+    staleTime: 8 * 60 * 1000,
+    gcTime: 10 * 60 * 1000
+  });
+  if (preview.isError) return <div className="viewer-loading">PDF UNAVAILABLE · SELECT DOWNLOAD</div>;
+  if (!preview.data) return <div className="viewer-loading">OPENING PDF</div>;
+  return <iframe className="pdf-preview" src={`${preview.data}#view=FitH`} title="PDF preview" />;
 }

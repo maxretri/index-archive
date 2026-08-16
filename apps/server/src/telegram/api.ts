@@ -3,6 +3,7 @@ import type { Config } from "../config.js";
 import type { TelegramMessage } from "../types.js";
 
 interface TelegramEnvelope<T> { ok: boolean; result?: T; description?: string }
+const resolvedFiles = new Map<string, { url: string; expiresAt: number }>();
 
 async function telegramCall<T>(config: Config, method: string, body?: BodyInit, headers?: HeadersInit): Promise<T> {
   const response = await fetch(`https://api.telegram.org/bot${config.BOT_TOKEN}/${method}`, {
@@ -150,10 +151,14 @@ export async function sendUploadToTelegram(
 }
 
 export async function resolveTelegramFile(config: Config, fileId: string) {
+  const cached = resolvedFiles.get(fileId);
+  if (cached && cached.expiresAt > Date.now()) return cached.url;
   const form = new URLSearchParams({ file_id: fileId });
   const file = await telegramCall<{ file_path?: string }>(config, "getFile", form);
   if (!file.file_path) throw new Error("Telegram did not return a file path");
-  return `https://api.telegram.org/file/bot${config.BOT_TOKEN}/${file.file_path}`;
+  const url = `https://api.telegram.org/file/bot${config.BOT_TOKEN}/${file.file_path}`;
+  resolvedFiles.set(fileId, { url, expiresAt: Date.now() + 50 * 60 * 1000 });
+  return url;
 }
 
 export async function configureTelegramBot(config: Config, webhookUrl: string) {
