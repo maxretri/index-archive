@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ArchiveFile, LibraryFilter } from "@index/shared";
 import { formatBytes, formatDuration } from "@index/shared";
-import { api } from "../api";
+import { api, getCachedFiles } from "../api";
 import { useIntersection } from "../hooks";
 import { PrivateImage } from "./PrivateMedia";
 
@@ -26,11 +26,15 @@ export function Library({ filter, q, collectionId, from, to, onOpen }: Props) {
   const [showDelete, setShowDelete] = useState(false);
   const [targetCollections, setTargetCollections] = useState<Set<string>>(new Set());
   const [newCollectionName, setNewCollectionName] = useState("");
+  const queryParams = useMemo(() => ({ filter, q, collectionId, from, to }), [filter, q, collectionId, from, to]);
+  const cached = useMemo(() => getCachedFiles(queryParams), [queryParams]);
   const query = useInfiniteQuery({
     queryKey: ["files", filter, q, collectionId, from, to],
     queryFn: ({ pageParam }) => api.files({ filter, q, collectionId, from, to, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.nextCursor ?? undefined
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    initialData: cached ? { pages: [cached.data], pageParams: [undefined] } : undefined,
+    initialDataUpdatedAt: cached?.savedAt
   });
   const files = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
   const groups = useMemo(() => {

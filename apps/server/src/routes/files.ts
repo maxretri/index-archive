@@ -235,7 +235,6 @@ export async function fileRoutes(app: FastifyInstance, services: Services, authe
       .maybeSingle();
     if (error) throw error;
     if (!data) return reply.code(404).send({ error: "File not found" });
-    if (data.mime_type !== "application/pdf") return reply.code(400).send({ error: "Preview is only available for PDF files" });
 
     const telegramUrl = await resolveTelegramFile(services.config, data.telegram_file_id as string);
     const range = typeof request.headers.range === "string" && /^bytes=\d*-\d*$/.test(request.headers.range)
@@ -246,10 +245,10 @@ export async function fileRoutes(app: FastifyInstance, services: Services, authe
     }
 
     reply.code(upstream.status === 206 ? 206 : 200);
-    reply.header("content-type", "application/pdf");
+    reply.header("content-type", data.mime_type ?? upstream.headers.get("content-type") ?? "application/octet-stream");
     reply.header("accept-ranges", upstream.headers.get("accept-ranges") ?? "bytes");
     reply.header("cache-control", "private, max-age=600");
-    reply.header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(String(data.filename ?? `index-${params.data.id}.pdf`))}`);
+    reply.header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(String(data.filename ?? `index-${params.data.id}`))}`);
     for (const header of ["content-length", "content-range", "etag", "last-modified"] as const) {
       const value = upstream.headers.get(header);
       if (value) reply.header(header, value);

@@ -236,7 +236,7 @@ function SharedAudio({ fileId, shareToken }: { fileId: string; shareToken: strin
 function PdfPreview({ fileId }: { fileId: string }) {
   const preview = useQuery({
     queryKey: ["pdf-preview", fileId],
-    queryFn: () => api.pdfPreviewUrl(fileId),
+    queryFn: () => api.previewUrl(fileId),
     staleTime: 8 * 60 * 1000,
     gcTime: 10 * 60 * 1000
   });

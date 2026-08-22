@@ -32,7 +32,7 @@ describe("library type filters", () => {
   });
 });
 
-describe("PDF streaming preview", () => {
+describe("streaming file preview", () => {
   it("forwards browser byte ranges without buffering the entire PDF", async () => {
     const query = {
       select() { return this; },
@@ -67,6 +67,43 @@ describe("PDF streaming preview", () => {
     expect(response.headers["content-range"]).toBe("bytes 0-12/100");
     expect(response.body).toBe("%PDF-streamed");
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ headers: { range: "bytes=0-12" } });
+    await app.close();
+  });
+
+  it("streams video byte ranges so playback can begin before the whole file downloads", async () => {
+    const query = {
+      select() { return this; },
+      eq() { return this; },
+      maybeSingle() {
+        return Promise.resolve({
+          data: { telegram_file_id: "unique-video-file-id", mime_type: "video/mp4", filename: "clip.mp4" },
+          error: null
+        });
+      }
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, result: { file_path: "videos/clip.mp4" } }), {
+        status: 200, headers: { "content-type": "application/json" }
+      }))
+      .mockResolvedValueOnce(new Response("video-chunk", {
+        status: 206,
+        headers: { "content-type": "video/mp4", "content-range": "bytes 0-10/5000000", "content-length": "11", "accept-ranges": "bytes" }
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = await buildApp(config, { from: () => query } as never);
+    const fileId = "443f563f-e718-47ca-898c-31799594bdc3";
+    const token = await createFilePreviewToken("user-id", fileId, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/files/${fileId}/preview?access=${encodeURIComponent(token)}`,
+      headers: { range: "bytes=0-10" }
+    });
+
+    expect(response.statusCode).toBe(206);
+    expect(response.headers["content-type"]).toBe("video/mp4");
+    expect(response.headers["content-range"]).toBe("bytes 0-10/5000000");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ headers: { range: "bytes=0-10" } });
     await app.close();
   });
 });

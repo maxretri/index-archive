@@ -1,8 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api, getSession, setSession } from "../api";
 
+function telegramUserId() {
+  const id = window.Telegram?.WebApp.initDataUnsafe?.user?.id;
+  return id === undefined ? undefined : String(id);
+}
+
 export function AuthGate({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">(getSession() ? "ready" : "loading");
+  const [state, setState] = useState<"loading" | "ready" | "error">(getSession(telegramUserId()) ? "ready" : "loading");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -11,7 +16,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     telegram?.setBackgroundColor("#f7f7f3");
     telegram?.expand();
     telegram?.ready();
-    if (getSession()) return;
+    if (getSession(telegramUserId())) return;
     if (!telegram?.initData) {
       setMessage("Open INDEX from its Telegram bot. Authentication is only available inside Telegram.");
       setState("error");

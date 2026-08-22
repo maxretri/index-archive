@@ -16,7 +16,7 @@ export async function authRoutes(app: FastifyInstance, services: Services) {
         maxAgeSeconds: services.config.AUTH_MAX_AGE_SECONDS
       });
       const dbUser = await upsertUser(services, verified.user);
-      const expiresIn = 86_400;
+      const expiresIn = 7 * 86_400;
       const token = await createSession({ id: dbUser.id, telegramUserId: String(dbUser.telegram_user_id) }, services.config.SESSION_SECRET, expiresIn);
       return reply.send({
         token,

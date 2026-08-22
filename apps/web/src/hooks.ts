@@ -56,6 +56,31 @@ export function useReceivedObjectUrl(grantId: string, id: string, variant: "thum
   return { ...query, url };
 }
 
+export function useNearViewport(active = true, rootMargin = "600px") {
+  const [node, setNode] = useState<Element | null>(null);
+  const [near, setNear] = useState(!active);
+  useEffect(() => {
+    if (!active) {
+      setNear(true);
+      return;
+    }
+    if (!node || near) return;
+    if (!("IntersectionObserver" in window)) {
+      setNear(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setNear(true);
+        observer.disconnect();
+      }
+    }, { rootMargin });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [active, near, node, rootMargin]);
+  return { near, ref: setNode };
+}
+
 export function useIntersection(onIntersect: () => void, active = true) {
   const [node, setNode] = useState<Element | null>(null);
   useEffect(() => {

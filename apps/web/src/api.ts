@@ -2,10 +2,79 @@ import type { AuthResponse, Collection, LibraryFilter, PaginatedFiles, ReceivedC
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const sessionKey = "index.session";
+const fileCachePrefix = "index.files.v1";
 
-export function getSession() { return sessionStorage.getItem(sessionKey); }
-export function setSession(value: string) { sessionStorage.setItem(sessionKey, value); }
-export function clearSession() { sessionStorage.removeItem(sessionKey); }
+interface SessionPayload { sub?: string; telegramUserId?: string; exp?: number }
+interface CachedFiles { savedAt: number; data: PaginatedFiles }
+
+function readSessionPayload(value: string): SessionPayload | null {
+  try {
+    const encoded = value.split(".")[1];
+    if (!encoded) return null;
+    const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    return JSON.parse(atob(normalized)) as SessionPayload;
+  } catch { return null; }
+}
+
+export function getSession(expectedTelegramUserId?: string) {
+  let value: string | null = null;
+  try {
+    value = localStorage.getItem(sessionKey) ?? sessionStorage.getItem(sessionKey);
+  } catch { /* storage can be disabled by the webview */ }
+  if (!value) return null;
+  const payload = readSessionPayload(value);
+  const expired = !payload?.exp || payload.exp * 1000 <= Date.now() + 5_000;
+  const wrongTelegramUser = Boolean(expectedTelegramUserId && payload?.telegramUserId !== expectedTelegramUserId);
+  if (!payload?.sub || expired || wrongTelegramUser) {
+    clearSession();
+    return null;
+  }
+  try {
+    localStorage.setItem(sessionKey, value);
+    sessionStorage.removeItem(sessionKey);
+  } catch { /* keep the in-memory webview session when persistent storage is unavailable */ }
+  return value;
+}
+
+export function setSession(value: string) {
+  try {
+    localStorage.setItem(sessionKey, value);
+    sessionStorage.removeItem(sessionKey);
+  } catch { sessionStorage.setItem(sessionKey, value); }
+}
+
+export function clearSession() {
+  try { localStorage.removeItem(sessionKey); } catch { /* no-op */ }
+  try { sessionStorage.removeItem(sessionKey); } catch { /* no-op */ }
+}
+
+function firstPageCacheKey(params: { filter: LibraryFilter; cursor?: string; q?: string; collectionId?: string; from?: string; to?: string }) {
+  if (params.cursor || params.q || params.collectionId || params.from || params.to) return null;
+  const session = getSession();
+  const userId = session ? readSessionPayload(session)?.sub : undefined;
+  return userId ? `${fileCachePrefix}.${userId}.${params.filter}` : null;
+}
+
+export function getCachedFiles(params: { filter: LibraryFilter; cursor?: string; q?: string; collectionId?: string; from?: string; to?: string }): CachedFiles | null {
+  const key = firstPageCacheKey(params);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as CachedFiles;
+    if (!Number.isFinite(cached.savedAt) || Date.now() - cached.savedAt > 24 * 60 * 60 * 1000 || !Array.isArray(cached.data?.items)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return cached;
+  } catch { return null; }
+}
+
+function cacheFiles(params: { filter: LibraryFilter; cursor?: string; q?: string; collectionId?: string; from?: string; to?: string }, data: PaginatedFiles) {
+  const key = firstPageCacheKey(params);
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data } satisfies CachedFiles)); } catch { /* cache is an optional acceleration */ }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getSession();
@@ -28,14 +97,16 @@ export const api = {
   subscriptionCheckout: () => request<{ invoiceLink: string }>("/api/subscription/checkout", { method: "POST" }),
   cancelSubscription: () => request<SubscriptionStatus>("/api/subscription/cancel", { method: "POST" }),
   resumeSubscription: () => request<SubscriptionStatus>("/api/subscription/resume", { method: "POST" }),
-  files: (params: { filter: LibraryFilter; cursor?: string; q?: string; collectionId?: string; from?: string; to?: string }) => {
+  files: async (params: { filter: LibraryFilter; cursor?: string; q?: string; collectionId?: string; from?: string; to?: string }) => {
     const query = new URLSearchParams({ filter: params.filter, limit: "30" });
     if (params.cursor) query.set("cursor", params.cursor);
     if (params.q) query.set("q", params.q);
     if (params.collectionId) query.set("collectionId", params.collectionId);
     if (params.from) query.set("from", params.from);
     if (params.to) query.set("to", params.to);
-    return request<PaginatedFiles>(`/api/files?${query}`);
+    const result = await request<PaginatedFiles>(`/api/files?${query}`);
+    cacheFiles(params, result);
+    return result;
   },
   collections: () => request<Collection[]>("/api/collections"),
   createCollection: (name: string) => request<Collection>("/api/collections", { method: "POST", body: JSON.stringify({ name }) }),
@@ -61,7 +132,7 @@ export const api = {
     if (!response.ok) throw new Error("File unavailable");
     return response.blob();
   },
-  pdfPreviewUrl: async (id: string) => {
+  previewUrl: async (id: string) => {
     const result = await request<{ token: string; expiresIn: number }>(`/api/files/${id}/preview-token`, { method: "POST" });
     return `${API_URL}/api/files/${id}/preview?access=${encodeURIComponent(result.token)}`;
   },
