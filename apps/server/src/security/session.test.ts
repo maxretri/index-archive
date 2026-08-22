@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createFilePreviewToken, createSession, verifyFilePreviewToken, verifySession } from "./session.js";
+import {
+  createCollectionExportToken,
+  createFilePreviewToken,
+  createSession,
+  verifyCollectionExportToken,
+  verifyFilePreviewToken,
+  verifySession
+} from "./session.js";
 
 describe("application sessions", () => {
   it("round-trips the server-owned user identity", async () => {
@@ -14,5 +21,12 @@ describe("application sessions", () => {
     const token = await createFilePreviewToken("user-id", "file-id", secret, 60);
     await expect(verifyFilePreviewToken(token, secret)).resolves.toEqual({ userId: "user-id", fileId: "file-id" });
     await expect(verifyFilePreviewToken(token, `${secret}-wrong`)).rejects.toThrow();
+  });
+
+  it("scopes a collection export token to one owner and collection", async () => {
+    const secret = "a-secure-test-secret-that-is-longer-than-32-characters";
+    const token = await createCollectionExportToken("user-id", "collection-id", secret, 60);
+    await expect(verifyCollectionExportToken(token, secret)).resolves.toEqual({ userId: "user-id", collectionId: "collection-id" });
+    await expect(verifyCollectionExportToken(token, `${secret}-wrong`)).rejects.toThrow();
   });
 });

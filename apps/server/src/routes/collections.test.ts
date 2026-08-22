@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import { buildApp } from "../app.js";
-import { createSession } from "../security/session.js";
+import { createCollectionExportToken, createSession } from "../security/session.js";
 
 const config: Config = {
   BOT_TOKEN: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
@@ -17,6 +17,8 @@ const config: Config = {
 
 const userId = "81a41446-c8ce-4b53-a8a7-9080c5b31ba1";
 const collectionId = "da3ad9ee-05dc-4844-8941-6b764e431406";
+
+afterEach(() => vi.unstubAllGlobals());
 
 class CollectionMutation {
   filters: Array<[string, unknown]> = [];
@@ -97,6 +99,113 @@ describe("collection management", () => {
     expect(query.deleted).toBe(true);
     expect(query.filters).toContainEqual(["user_id", userId]);
     expect(query.filters).toContainEqual(["id", collectionId]);
+    await app.close();
+  });
+});
+
+describe("collection ZIP export", () => {
+  it("creates a short-lived download only for the collection owner", async () => {
+    const filters: Array<[string, string, unknown]> = [];
+    const database = {
+      from(table: string) {
+        let head = false;
+        return {
+          select(_columns: string, options?: { head?: boolean }) { head = Boolean(options?.head); return this; },
+          eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          maybeSingle() {
+            return Promise.resolve({ data: table === "collections" ? { id: collectionId, name: "SUMMER 2026" } : null, error: null });
+          },
+          then(onfulfilled: (value: { count: number; error: null }) => unknown) {
+            if (!head) throw new Error("Unexpected database await");
+            return Promise.resolve({ count: 2, error: null }).then(onfulfilled);
+          }
+        };
+      }
+    };
+    const app = await buildApp(config, database as never);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/collections/${collectionId}/export`,
+      headers: { authorization: `Bearer ${await session()}` }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const result = response.json<{ url: string; filename: string; expiresIn: number }>();
+    expect(result.filename).toBe("INDEX-SUMMER-2026.zip");
+    expect(result.expiresIn).toBe(600);
+    expect(result.url).toMatch(new RegExp(`^/api/collections/${collectionId}/download\\?access=`));
+    expect(filters).toContainEqual(["collections", "user_id", userId]);
+    expect(filters).toContainEqual(["collection_files", "user_id", userId]);
+    await app.close();
+  });
+
+  it("streams the owner's Telegram files into a ZIP without storing the archive", async () => {
+    const filters: Array<[string, string, unknown]> = [];
+    const database = {
+      from(table: string) {
+        return {
+          select() { return this; },
+          eq(column: string, value: unknown) { filters.push([table, column, value]); return this; },
+          order() { return this; },
+          limit() {
+            return Promise.resolve({
+              data: [{ files: {
+                telegram_file_id: "zip-photo-file-id",
+                filename: "holiday.jpg",
+                mime_type: "image/jpeg",
+                file_type: "photo",
+                file_size: 12,
+                created_at: "2026-08-20T10:00:00.000Z"
+              } }],
+              error: null
+            });
+          },
+          maybeSingle() {
+            return Promise.resolve({ data: table === "collections" ? { id: collectionId, name: "SUMMER" } : null, error: null });
+          }
+        };
+      }
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, result: { file_path: "photos/holiday.jpg" } }), {
+        status: 200, headers: { "content-type": "application/json" }
+      }))
+      .mockResolvedValueOnce(new Response("photo-bytes", { status: 200, headers: { "content-type": "image/jpeg" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const app = await buildApp(config, database as never);
+    const token = await createCollectionExportToken(userId, collectionId, config.SESSION_SECRET, 60);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/collections/${collectionId}/download?access=${encodeURIComponent(token)}`
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/zip");
+    expect(response.headers["content-disposition"]).toBe('attachment; filename="INDEX-SUMMER.zip"');
+    expect(response.headers["access-control-allow-origin"]).toBe("https://web.telegram.org");
+    expect(response.rawPayload.subarray(0, 2).toString()).toBe("PK");
+    expect(response.rawPayload.toString("latin1")).toContain("holiday.jpg");
+    expect(response.rawPayload.toString("latin1")).toContain("photo-bytes");
+    expect(filters).toContainEqual(["collections", "user_id", userId]);
+    expect(filters).toContainEqual(["collection_files", "user_id", userId]);
+    await app.close();
+  });
+
+  it("rejects a download token for a different collection before querying metadata", async () => {
+    let queried = false;
+    const otherCollectionId = "3d351b7b-28cb-449f-98e8-70e760279089";
+    const token = await createCollectionExportToken(userId, otherCollectionId, config.SESSION_SECRET, 60);
+    const app = await buildApp(config, { from: () => {
+      queried = true;
+      throw new Error("Database must not be queried");
+    } } as never);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/collections/${collectionId}/download?access=${encodeURIComponent(token)}`
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(queried).toBe(false);
     await app.close();
   });
 });

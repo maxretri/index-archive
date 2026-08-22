@@ -4,6 +4,7 @@ import type { SessionUser } from "../types.js";
 const issuer = "index-server";
 const audience = "index-mini-app";
 const previewAudience = "index-file-preview";
+const collectionExportAudience = "index-collection-export";
 
 function key(secret: string) { return new TextEncoder().encode(secret); }
 
@@ -43,4 +44,25 @@ export async function verifyFilePreviewToken(token: string, secret: string) {
     throw new Error("Invalid file preview token");
   }
   return { userId: payload.sub, fileId: payload.fileId };
+}
+
+export async function createCollectionExportToken(userId: string, collectionId: string, secret: string, expiresIn = 600) {
+  return new SignJWT({ collectionId, purpose: "collection-export" })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(userId)
+    .setIssuer(issuer)
+    .setAudience(collectionExportAudience)
+    .setIssuedAt()
+    .setExpirationTime(`${expiresIn}s`)
+    .sign(key(secret));
+}
+
+export async function verifyCollectionExportToken(token: string, secret: string) {
+  const { payload } = await jwtVerify(token, key(secret), {
+    algorithms: ["HS256"], issuer, audience: collectionExportAudience
+  });
+  if (!payload.sub || typeof payload.collectionId !== "string" || payload.purpose !== "collection-export") {
+    throw new Error("Invalid collection export token");
+  }
+  return { userId: payload.sub, collectionId: payload.collectionId };
 }

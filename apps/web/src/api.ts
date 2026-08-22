@@ -112,6 +112,10 @@ export const api = {
   createCollection: (name: string) => request<Collection>("/api/collections", { method: "POST", body: JSON.stringify({ name }) }),
   renameCollection: (id: string, name: string) => request<{ id: string; name: string }>(`/api/collections/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   deleteCollection: (id: string) => request<void>(`/api/collections/${id}`, { method: "DELETE" }),
+  prepareCollectionDownload: async (id: string) => {
+    const result = await request<{ url: string; filename: string; expiresIn: number }>(`/api/collections/${id}/export`, { method: "POST" });
+    return { ...result, url: new URL(result.url, API_URL || window.location.origin).toString() };
+  },
   shareCollection: (id: string) => request<{ messageId: string; expiresAt: number; link: string }>(`/api/collections/${id}/share`, { method: "POST" }),
   revokeCollectionShares: (id: string) => request<void>(`/api/collections/${id}/shares`, { method: "DELETE" }),
   addFilesToCollections: (fileIds: string[], collectionIds: string[]) => request<{ fileCount: number; collectionIds: string[] }>("/api/collections/files", {

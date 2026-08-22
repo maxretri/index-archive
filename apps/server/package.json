@@ -18,12 +18,14 @@
     "@fastify/rate-limit": "^10.3.0",
     "@index/shared": "workspace:*",
     "@supabase/supabase-js": "^2.54.0",
-    "fastify": "^5.4.0",
+    "archiver": "^8.0.0",
     "dotenv": "^17.2.1",
+    "fastify": "^5.4.0",
     "jose": "^6.0.12",
     "zod": "^4.0.17"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/node": "^22.17.1",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",

@@ -160,7 +160,7 @@ button:disabled { cursor: default; opacity: .42; }
 .collection-share-actions::-webkit-scrollbar { display: none; }
 .collection-share-actions button, .collection-share-actions span, .shared-label { flex: 0 0 auto; font-size: .54rem; letter-spacing: .1em; }
 .collection-share-actions button { padding: 0; }
-.collection-share-actions button:nth-of-type(3) { color: var(--grey); }
+.collection-share-actions .stop-sharing { color: var(--grey); }
 .collection-share-actions span { margin-left: auto; color: var(--grey); }
 .shared-label { align-self: flex-end; padding-bottom: 4px; color: var(--grey); }
 .shared-main { width: 100%; padding: 0 10px calc(28px + var(--safe-bottom)); }

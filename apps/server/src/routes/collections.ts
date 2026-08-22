@@ -3,7 +3,14 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Services } from "../types.js";
 import { createCollectionShareToken, hashCollectionShareToken } from "../security/collection-share.js";
+import { createCollectionExportToken, verifyCollectionExportToken } from "../security/session.js";
 import { prepareCollectionShare } from "../telegram/api.js";
+import {
+  collectionZipFilename,
+  MAX_COLLECTION_EXPORT_ITEMS,
+  streamCollectionZip,
+  type CollectionExportFile
+} from "./collection-export.js";
 
 export async function collectionRoutes(app: FastifyInstance, services: Services, authenticate: ReturnType<typeof import("../security/authenticate.js").authenticator>) {
   app.get("/api/collections", { preHandler: authenticate }, async (request) => {
@@ -123,6 +130,91 @@ export async function collectionRoutes(app: FastifyInstance, services: Services,
       .eq("user_id", userId).eq("collection_id", params.data.id).is("revoked_at", null);
     if (error) throw error;
     return reply.code(204).send();
+  });
+
+  app.post("/api/collections/:id/export", {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 10, timeWindow: "10 minutes" } }
+  }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid collection" });
+    const userId = request.sessionUser!.id;
+    const [{ data: collection, error }, countResult] = await Promise.all([
+      services.db.from("collections").select("id,name")
+        .eq("user_id", userId).eq("id", params.data.id).maybeSingle(),
+      services.db.from("collection_files").select("file_id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("collection_id", params.data.id)
+    ]);
+    if (error) throw error;
+    if (countResult.error) throw countResult.error;
+    if (!collection) return reply.code(404).send({ error: "Collection not found" });
+    if ((countResult.count ?? 0) > MAX_COLLECTION_EXPORT_ITEMS) {
+      return reply.code(413).send({ error: `Collection ZIP is limited to ${MAX_COLLECTION_EXPORT_ITEMS} items` });
+    }
+    const expiresIn = 600;
+    const token = await createCollectionExportToken(userId, params.data.id, services.config.SESSION_SECRET, expiresIn);
+    const filename = collectionZipFilename(collection.name as string);
+    return reply.send({
+      url: `/api/collections/${params.data.id}/download?access=${encodeURIComponent(token)}`,
+      filename,
+      expiresIn
+    });
+  });
+
+  app.get("/api/collections/:id/download", {
+    logLevel: "silent",
+    config: { rateLimit: { max: 6, timeWindow: "10 minutes" } }
+  }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const query = z.object({ access: z.string().min(20).max(4096) }).safeParse(request.query);
+    if (!params.success || !query.success) return reply.code(400).send({ error: "Invalid collection export" });
+
+    let exportAccess: { userId: string; collectionId: string };
+    try {
+      exportAccess = await verifyCollectionExportToken(query.data.access, services.config.SESSION_SECRET);
+    } catch {
+      return reply.code(401).send({ error: "Invalid or expired collection export" });
+    }
+    if (exportAccess.collectionId !== params.data.id) {
+      return reply.code(401).send({ error: "Invalid collection export" });
+    }
+
+    const [{ data: collection, error: collectionError }, { data: memberships, error: membershipError }] = await Promise.all([
+      services.db.from("collections").select("id,name")
+        .eq("user_id", exportAccess.userId).eq("id", params.data.id).maybeSingle(),
+      services.db.from("collection_files")
+        .select("files!inner(telegram_file_id,filename,mime_type,file_type,file_size,created_at)")
+        .eq("user_id", exportAccess.userId)
+        .eq("collection_id", params.data.id)
+        .order("created_at", { ascending: true })
+        .limit(MAX_COLLECTION_EXPORT_ITEMS + 1)
+    ]);
+    if (collectionError) throw collectionError;
+    if (membershipError) throw membershipError;
+    if (!collection) return reply.code(404).send({ error: "Collection not found" });
+    if ((memberships?.length ?? 0) > MAX_COLLECTION_EXPORT_ITEMS) {
+      return reply.code(413).send({ error: `Collection ZIP is limited to ${MAX_COLLECTION_EXPORT_ITEMS} items` });
+    }
+
+    const files = (memberships ?? []).flatMap((membership): CollectionExportFile[] => {
+      const related = membership.files as unknown as Record<string, unknown> | Array<Record<string, unknown>> | null;
+      const file = Array.isArray(related) ? related[0] : related;
+      if (!file || typeof file.telegram_file_id !== "string" || typeof file.file_type !== "string" || typeof file.created_at !== "string") return [];
+      return [{
+        telegramFileId: file.telegram_file_id,
+        filename: typeof file.filename === "string" ? file.filename : null,
+        mimeType: typeof file.mime_type === "string" ? file.mime_type : null,
+        fileType: file.file_type as CollectionExportFile["fileType"],
+        fileSize: typeof file.file_size === "number" ? file.file_size : file.file_size ? Number(file.file_size) : null,
+        createdAt: file.created_at
+      }];
+    });
+    const filename = collectionZipFilename(collection.name as string);
+    reply.header("content-type", "application/zip");
+    reply.header("content-disposition", `attachment; filename="${filename}"`);
+    reply.header("cache-control", "private, no-store");
+    reply.header("access-control-allow-origin", "https://web.telegram.org");
+    return reply.send(streamCollectionZip(services.config, files));
   });
 
   app.post("/api/collections/files", { preHandler: authenticate }, async (request, reply) => {

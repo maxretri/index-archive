@@ -8,6 +8,7 @@ interface TelegramWebApp {
   setBackgroundColor(color: string): void;
   enableClosingConfirmation(): void;
   shareMessage(messageId: string, callback?: (success: boolean) => void): void;
+  downloadFile?(params: { url: string; file_name: string }, callback?: (accepted: boolean) => void): void;
   showAlert(message: string, callback?: () => void): void;
   openInvoice(url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending") => void): void;
   openLink(url: string): void;

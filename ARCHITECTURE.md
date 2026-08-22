@@ -57,6 +57,8 @@ The webhook accepts private-chat `photo`, `video`, `document`, and `audio` messa
 
 The Mini App requests cursor-paginated metadata. Photo and video grids load authenticated thumbnail URLs lazily. The content endpoint verifies ownership before resolving the Telegram file path and streaming the binary with private caching. Full originals are requested only in viewers or downloads.
 
+Collection exports use a short-lived server-signed owner capability. The API reads collection membership from Postgres, resolves each original from Telegram, and writes a store-mode ZIP directly to the HTTP response. Neither the source binaries nor the generated ZIP are persisted in Supabase or on server disk. Export entry names are path-sanitized and deduplicated; the endpoint is rate-limited and capped at 500 items per archive.
+
 ### Mini App upload
 
 The browser uploads one file with progress to the authenticated server. The server validates size/type, streams it to Telegram with `sendPhoto`, `sendVideo`, `sendAudio`, or `sendDocument`, then indexes the returned message exactly like webhook ingestion. Telegram remains the canonical binary store.

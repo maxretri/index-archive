@@ -27,6 +27,7 @@ The bot only indexes files a user explicitly sends, forwards, or uploads. Origin
 - Telegram-hosted thumbnails, lazy loading, and reserved image aspect ratios
 - Fullscreen photo, video, and PDF viewers with mobile swipe navigation
 - Original download/open, favorites, tags, and virtual multi-file collections
+- Owner-only, streaming ZIP downloads for complete collections; archives are never stored in Supabase
 - Revocable read-only collection links shared through Telegram's native recipient picker
 - Search across filename, type, MIME type, caption, tags, collections, and date range
 - Mini App uploads with progress; the server sends the binary through Telegram before indexing it

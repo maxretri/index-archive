@@ -46,11 +46,35 @@ export function CollectionShareControls({ collection, onChange }: { collection: 
     },
     onError: (error) => setNotice(error.message)
   });
+  const download = useMutation({
+    mutationFn: () => api.prepareCollectionDownload(collection.id),
+    onSuccess: ({ url, filename }) => {
+      const webApp = window.Telegram?.WebApp;
+      setNotice("ZIP READY");
+      if (webApp?.downloadFile) {
+        webApp.downloadFile({ url, file_name: filename }, (accepted) => {
+          setNotice(accepted ? "DOWNLOAD STARTED" : "DOWNLOAD CANCELLED");
+          if (accepted) webApp.HapticFeedback?.notificationOccurred("success");
+        });
+        return;
+      }
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.rel = "noopener";
+      anchor.click();
+      setNotice("DOWNLOAD STARTED");
+    },
+    onError: (error) => setNotice(error.message)
+  });
+
+  const pending = share.isPending || revoke.isPending || download.isPending;
 
   return <div className="collection-share-actions">
-    <button disabled={share.isPending || revoke.isPending} onClick={() => share.mutate("native")}>{share.isPending ? "PREPARING" : "SHARE WITH"}</button>
-    <button disabled={share.isPending || revoke.isPending} onClick={() => share.mutate("copy")}>COPY LINK</button>
-    {collection.isShared && <button disabled={revoke.isPending || share.isPending} onClick={() => revoke.mutate()}>{revoke.isPending ? "STOPPING" : "STOP SHARING"}</button>}
+    <button disabled={pending} onClick={() => share.mutate("native")}>{share.isPending ? "PREPARING" : "SHARE WITH"}</button>
+    <button disabled={pending} onClick={() => share.mutate("copy")}>COPY LINK</button>
+    <button className="download-collection" disabled={pending} onClick={() => download.mutate()}>{download.isPending ? "PREPARING ZIP" : "DOWNLOAD ZIP"}</button>
+    {collection.isShared && <button className="stop-sharing" disabled={pending} onClick={() => revoke.mutate()}>{revoke.isPending ? "STOPPING" : "STOP SHARING"}</button>}
     {notice && <span>{notice}</span>}
   </div>;
 }
